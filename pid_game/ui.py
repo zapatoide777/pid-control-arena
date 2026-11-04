@@ -1,0 +1,689 @@
+"""Control Arena: reproducción independiente de la evaluación física."""
+import math
+from pathlib import Path
+import sys
+import time
+from PySide6.QtCore import Qt, QTimer, QElapsedTimer, QPropertyAnimation, QEasingCurve, QParallelAnimationGroup, QSequentialAnimationGroup, QPauseAnimation
+from PySide6.QtGui import QColor, QFontDatabase, QPainter
+from PySide6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+    QPushButton, QFrame, QLineEdit, QDoubleSpinBox, QSlider, QStackedWidget,
+    QProgressBar, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
+    QScrollArea, QComboBox, QAbstractSpinBox, QGraphicsOpacityEffect,
+)
+from PySide6.QtCharts import QChart, QChartView, QValueAxis, QBarSeries, QBarSet, QBarCategoryAxis
+from .controller import Gains, DEMO_GAINS
+from .game import Game, State, Phase
+from .simulation import simulate, hint, DURATION, STABILITY_WINDOW, STABLE_FROM, DT, STEP_TIME, STEP_DEGREES, iae_segment
+from .storage import Ranking
+from .motion import ArcadeButton, ReportSweep
+from . import motion
+from .theme import (BG, PLOT, SURFACE, SURFACE_RAISED, LINE, GRID, TEXT, MUTED as THEME_MUTED,
+                    CYAN, BLUE, LIME, FONT_BODY, FONT_DISPLAY, FONT_DATA, FONT_FILES)
+from .visuals import PendulumView, ResponseChart, AttemptStrip, AnalysisTrace, GainReadout, prepare_chart, GREEN, MUTED
+
+PRE_ROLL = .65  # preparación visual, fuera del IAE
+STYLE = """
+QWidget { font-family: '__BODY__'; font-size: 13px; color: #ecf5fa; }
+QMainWindow, QWidget#root { background: #0a1728; }
+QFrame#card { background: transparent; border: none; }
+QLabel { background: transparent; }
+QLabel#brand { color: #a7e35c; font-size: 12px; font-weight: 600; }
+QLabel#title { font-family: '__DISPLAY__'; font-size: 27px; font-weight: 700; letter-spacing: 1px; }
+QLabel#hero { font-family: '__DISPLAY__'; font-size: 52px; font-weight: 700; }
+QLabel#heading { font-family: '__DISPLAY__'; font-size: 21px; font-weight: 600; }
+QLabel#muted { color: #a9bfce; }
+QLabel#metric { font-family: '__DATA__'; font-size: 25px; font-weight: 600; color: #6adcf1; }
+QLabel#telemetry { font-family: '__DATA__'; font-size: 21px; font-weight: 600; color: #6adcf1; }
+QLabel#telemetrySmall { font-family: '__DATA__'; font-size: 15px; font-weight: 600; color: #6adcf1; }
+QLabel#score { font-family: '__DATA__'; font-size: 68px; font-weight: 700; color: #a7e35c; }
+QPushButton { background: #a7e35c; color: #10281c; border: 1px solid #a7e35c; border-radius: 3px; padding: 10px 17px; min-height: 20px; font-weight: 700; }
+QPushButton:hover { background: #c7f182; }
+QPushButton:focus, QComboBox:focus, QSlider:focus { border: 2px solid #5dd8f0; }
+QPushButton:disabled { background: #1b3042; color: #738b99; border-color: #31495a; }
+QPushButton#secondary { background: #1a3046; color: #e4f2f8; border: 1px solid #3e6175; }
+QPushButton#secondary:disabled { color: #708797; border-color: #2a4152; }
+QLineEdit, QDoubleSpinBox, QComboBox { background: #102238; border: 1px solid #45677a; border-radius: 3px; padding: 7px; min-height: 24px; color: #edf7fc; selection-background-color: #267ea2; }
+QLineEdit:focus, QDoubleSpinBox:focus { border: 1px solid #a7e35c; }
+QDoubleSpinBox { font-family: '__DATA__'; font-size: 21px; }
+QDoubleSpinBox QLineEdit { padding: 0; border: none; background: transparent; min-height: 0; font-size: 24px; }
+QDoubleSpinBox:disabled, QDoubleSpinBox QLineEdit:disabled { color: #a1b4be; }
+QDoubleSpinBox::up-button, QDoubleSpinBox::down-button { background: #294558; width: 18px; }
+QComboBox QAbstractItemView { background: #102238; color: #edf7fc; selection-background-color: #326eab; }
+QSlider::groove:horizontal { height: 5px; background: #334c5d; border-radius: 2px; }
+QSlider::sub-page:horizontal { background: #55c7e5; border-radius: 2px; }
+QSlider::handle:horizontal { background: #a7e35c; border: 2px solid #183044; width: 17px; margin: -7px 0; border-radius: 9px; }
+QProgressBar { background: #273e50; border: none; border-radius: 3px; min-height: 6px; max-height: 6px; }
+QProgressBar::chunk { background: #a7e35c; border-radius: 3px; }
+QTableWidget { background: #12243a; color: #edf7fc; border: none; gridline-color: #2c4354; alternate-background-color: #182d43; selection-background-color: #28506b; }
+QHeaderView::section { background: #213c50; color: #d5e8ef; border: none; padding: 10px 6px; }
+QScrollArea, QScrollArea > QWidget > QWidget { background: transparent; border: none; }
+QScrollBar:vertical { background: #172e40; width: 12px; margin: 0; border-radius: 6px; }
+QScrollBar::handle:vertical { background: #7bb4c5; min-height: 32px; border-radius: 6px; }
+QScrollBar::handle:vertical:hover { background: #a7e35c; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; background: none; border: none; }
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
+"""
+
+
+def configure_app(app):
+    font_dir = Path(__file__).resolve().parent.parent / "assets" / "fonts"
+    for name in FONT_FILES:
+        path = font_dir / name
+        if path.is_file():
+            QFontDatabase.addApplicationFont(str(path))
+    available = set(QFontDatabase.families())
+    body = FONT_BODY if FONT_BODY in available else "Segoe UI"
+    display = FONT_DISPLAY if FONT_DISPLAY in available else body
+    data = FONT_DATA if FONT_DATA in available else "Consolas"
+    style = STYLE.replace("__BODY__", body).replace("__DISPLAY__", display).replace("__DATA__", data)
+    for old, new in (("#0a1728", BG), ("#12243a", PLOT), ("#102238", SURFACE),
+                     ("#1a3046", SURFACE_RAISED), ("#45677a", LINE), ("#30475b", GRID),
+                     ("#edf7fc", TEXT), ("#a9bfce", THEME_MUTED), ("#6adcf1", CYAN),
+                     ("#326eab", BLUE), ("#a7e35c", LIME)):
+        style = style.replace(old, new)
+    app.setStyle("Fusion")
+    app.setStyleSheet(style)
+
+
+def label(text, kind="", wrap=False):
+    widget = QLabel(text)
+    widget.setObjectName(kind)
+    widget.setWordWrap(wrap)
+    widget.setTextFormat(Qt.TextFormat.PlainText)
+    return widget
+
+
+def card():
+    frame = QFrame()
+    frame.setObjectName("card")
+    layout = QVBoxLayout(frame)
+    layout.setContentsMargins(22, 18, 22, 18)
+    layout.setSpacing(12)
+    return frame, layout
+
+
+def button(text, callback, secondary=False):
+    widget = ArcadeButton(text)
+    if secondary:
+        widget.setObjectName("secondary")
+    widget.clicked.connect(callback)
+    return widget
+
+
+class GainControl(QWidget):
+    def __init__(self, name, meaning, unit, maximum, value):
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 0, 8, 0)
+        row = QHBoxLayout()
+        row.addWidget(label(f"{name}  ·  {meaning}", "brand"))
+        row.addStretch()
+        self.spin = QDoubleSpinBox()
+        self.spin.setRange(0, maximum)
+        self.spin.setDecimals(2)
+        self.spin.setSingleStep(.01)
+        self.spin.setKeyboardTracking(False)
+        self.spin.setFixedSize(140, 52)
+        self.spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
+        self.spin.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.spin.setAccessibleName(f"{name}, {meaning}")
+        self.spin.setAccessibleDescription(f"Valor entre 0 y {maximum}; unidad {unit}")
+        row.addWidget(self.spin)
+        layout.addLayout(row)
+        self.slider = QSlider(Qt.Orientation.Horizontal)
+        self.slider.setRange(0, maximum*100)
+        self.slider.setMinimumHeight(25)
+        self.slider.setAccessibleName(f"Ajustar {name}, {meaning}")
+        self.slider.valueChanged.connect(lambda v: self.spin.setValue(v/100))
+        self.spin.valueChanged.connect(lambda v: self.slider.setValue(round(v*100)))
+        self.spin.setValue(value)
+        layout.addWidget(self.slider)
+        layout.addWidget(label(unit, "muted"))
+
+
+class MainWindow(QMainWindow):
+    def __init__(self, data_path=None):
+        super().__init__()
+        self.setWindowTitle("PID / Control Arena")
+        self.resize(1400, 940)
+        self.setMinimumSize(1120, 800)
+        self.game = Game()
+        self.ranking = Ranking(data_path or Path(__file__).resolve().parent.parent / "data/ranking.json")
+        self.active_result = None
+        self.playback_clock = QElapsedTimer()
+        self.playback_active = False
+        self.playback_rate = 1.0
+        self.paused_at = None
+        self.pause_total_ms = 0
+        self.report_ready_at = 0.0
+        self.cumulative_iae = []
+        self.current_ranking_row = None
+        root = QWidget()
+        root.setObjectName("root")
+        self.setCentralWidget(root)
+        layout = QVBoxLayout(root)
+        layout.setContentsMargins(18, 12, 18, 10)
+        layout.setSpacing(8)
+        header = QHBoxLayout()
+        titles = QVBoxLayout()
+        titles.addWidget(label("PID  /  EQUILIBRIO", "title"))
+        header.addLayout(titles)
+        header.addStretch()
+        layout.addLayout(header)
+        self.stack = QStackedWidget()
+        layout.addWidget(self.stack, 1)
+        self._build_waiting()
+        self._build_playing()
+        self._build_finished()
+        self._build_report()
+        self.timer = QTimer(self)
+        self.timer.setInterval(16)
+        self.timer.timeout.connect(self.tick)
+        self.timer.start()
+
+    def _build_waiting(self):
+        page = QWidget()
+        outer = QVBoxLayout(page)
+        outer.setContentsMargins(0, 0, 0, 0)
+        hero, body = card()
+        row = QHBoxLayout()
+        copy = QVBoxLayout()
+        copy.addStretch()
+        copy.addWidget(label("Controla el\npéndulo", "hero"))
+        copy.addWidget(label("Ajusta Kp, Ki y Kd para seguir la referencia.", "muted", True))
+        copy.addSpacing(18)
+        self.alias_edit = QLineEdit()
+        self.alias_edit.setPlaceholderText("Tu nombre")
+        self.alias_edit.setAccessibleName("Nombre o alias del jugador")
+        self.alias_edit.setMaxLength(32)
+        self.alias_edit.setMaximumWidth(440)
+        copy.addWidget(self.alias_edit)
+        self.start_button = button("Jugar  →", self.start_game)
+        self.start_button.setMaximumWidth(440)
+        copy.addWidget(self.start_button)
+        copy.addWidget(label("Solo el tercer intento entra al ranking.", "muted", True))
+        copy.addStretch()
+        row.addLayout(copy, 5)
+        scene = PendulumView()
+        scene.angle = .23
+        row.addWidget(scene, 5)
+        body.addLayout(row)
+        outer.addWidget(hero, 1)
+        self.start_warning = label(self.ranking.warning, "muted", True)
+        outer.addWidget(self.start_warning)
+        self.stack.addWidget(page)
+
+    def _build_playing(self):
+        page = QWidget()
+        outer = QVBoxLayout(page)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(10)
+        top = QHBoxLayout()
+        headings = QVBoxLayout()
+        self.attempt_label = label("DEMOSTRACIÓN", "heading")
+        self.phase_label = label("", "muted")
+        headings.addWidget(self.attempt_label)
+        headings.addWidget(self.phase_label)
+        top.addLayout(headings, 2)
+        self.attempt_strip = AttemptStrip()
+        top.addWidget(self.attempt_strip, 3)
+        outer.addLayout(top)
+        workspace = QHBoxLayout()
+        workspace.setSpacing(14)
+        self.response_chart = ResponseChart()
+        workspace.addWidget(self.response_chart, 8)
+        instrument, content = card()
+        content.setContentsMargins(8, 0, 8, 0)
+        instrument.setMinimumWidth(285)
+        self.pendulum = PendulumView(length_scale=1.4)
+        content.addWidget(self.pendulum, 1)
+        telemetry = QHBoxLayout()
+        telemetry.setSpacing(16)
+        self.angle_label = label("0.0°", "telemetry")
+        self.time_label = label("0.00 s", "telemetry")
+        self.error_label = label("0.00 °·s", "telemetrySmall")
+        self.angle_caption = label("Ángulo", "muted")
+        self.time_caption = label(f"Tiempo / {DURATION:g} s", "muted")
+        for caption, metric in ((self.angle_caption, self.angle_label),
+                                (self.time_caption, self.time_label)):
+            col = QVBoxLayout()
+            col.addWidget(caption)
+            col.addWidget(metric)
+            telemetry.addLayout(col, 1)
+        content.addLayout(telemetry)
+        iae_row = QHBoxLayout()
+        iae_row.addWidget(label("IAE", "muted"))
+        iae_row.addWidget(self.error_label)
+        iae_row.addStretch()
+        content.addLayout(iae_row)
+        self.fall_label = label("PREPARANDO EMPUJÓN", "muted", True)
+        content.addWidget(self.fall_label)
+        workspace.addWidget(instrument, 3)
+        outer.addLayout(workspace, 1)
+        self.progress = QProgressBar()
+        self.progress.setRange(0, round(DURATION*1000))
+        self.progress.setTextVisible(False)
+        outer.addWidget(self.progress)
+        dock, content = card()
+        content.setContentsMargins(14, 10, 14, 10)
+        row = QHBoxLayout()
+        self.gain_controls = [GainControl("Kp", "corrección", "N·m/rad", 10, .1),
+                              GainControl("Ki", "acumulación", "N·m/(rad·s)", 5, 0),
+                              GainControl("Kd", "amortiguación", "N·m·s/rad", 3, 0)]
+        for control in self.gain_controls:
+            row.addWidget(control, 1)
+        content.addLayout(row)
+        outer.addWidget(dock)
+        actions = QHBoxLayout()
+        self.edit_note = label("", "muted", True)
+        actions.addWidget(self.edit_note, 1)
+        self.speed_combo = QComboBox()
+        for caption, rate in (("1× · tiempo real", 1.0), ("0,5× · cámara lenta", .5)):
+            self.speed_combo.addItem(caption, rate)
+        self.speed_combo.setAccessibleName("Velocidad de reproducción")
+        actions.addWidget(self.speed_combo)
+        self.pause_button = button("Pausar", self.toggle_pause, True)
+        actions.addWidget(self.pause_button)
+        self.skip_button = button("Omitir demo", self.skip_demo, True)
+        actions.addWidget(self.skip_button)
+        self.run_button = button("Ejecutar intento 1  →", self.run_trial)
+        actions.addWidget(self.run_button)
+        outer.addLayout(actions)
+        self.stack.addWidget(page)
+
+    def _build_report(self):
+        page = QWidget()
+        outer = QVBoxLayout(page)
+        outer.setContentsMargins(45, 12, 45, 12)
+        outer.setSpacing(18)
+        self.report_title = label("ANÁLISIS DEL INTENTO", "heading")
+        outer.addWidget(self.report_title)
+        self.report_strip = AttemptStrip()
+        outer.addWidget(self.report_strip)
+        self.report_sweep = ReportSweep()
+        outer.addWidget(self.report_sweep)
+        middle = QHBoxLayout()
+        score, content = card()
+        content.addWidget(label("ERROR ACUMULADO  /  IAE", "brand"))
+        self.report_iae = label("", "score")
+        content.addWidget(self.report_iae)
+        content.addWidget(label("°·s  /  menos es mejor", "muted"))
+        self.report_delta = label("", "heading", True)
+        content.addWidget(self.report_delta)
+        self.report_status = label("", "muted", True)
+        content.addWidget(self.report_status)
+        self.report_trace = AnalysisTrace()
+        content.addWidget(self.report_trace, 1)
+        middle.addWidget(score, 2)
+        guidance, content = card()
+        content.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.guide_title = label("TU SIGUIENTE MOVIMIENTO", "brand")
+        content.addWidget(self.guide_title)
+        self.feedback_label = label("", wrap=True)
+        self.feedback_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        self.feedback_label.setStyleSheet("font-size: 17px;")
+        content.addWidget(self.feedback_label)
+        content.addSpacing(16)
+        self.report_gains = GainReadout()
+        content.addWidget(self.report_gains)
+        content.addStretch(1)
+        middle.addWidget(guidance, 3)
+        outer.addLayout(middle, 1)
+        self.report_score_effect = QGraphicsOpacityEffect(score)
+        self.report_hint_effect = QGraphicsOpacityEffect(self.feedback_label)
+        score.setGraphicsEffect(self.report_score_effect)
+        self.feedback_label.setGraphicsEffect(self.report_hint_effect)
+        self.report_animation = QParallelAnimationGroup(self)
+        motion.on_motion_change(self._report_motion_changed)
+        score_fade = QPropertyAnimation(self.report_score_effect, b"opacity")
+        score_fade.setDuration(480)
+        score_fade.setStartValue(.18)
+        score_fade.setEndValue(1.0)
+        score_fade.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self.report_animation.addAnimation(score_fade)
+        hint_sequence = QSequentialAnimationGroup()
+        hint_sequence.addAnimation(QPauseAnimation(190))
+        hint_fade = QPropertyAnimation(self.report_hint_effect, b"opacity")
+        hint_fade.setDuration(550)
+        hint_fade.setStartValue(.12)
+        hint_fade.setEndValue(1.0)
+        hint_fade.setEasingCurve(QEasingCurve.Type.OutCubic)
+        hint_sequence.addAnimation(hint_fade)
+        self.report_animation.addAnimation(hint_sequence)
+        self.analysis_progress = QProgressBar()
+        self.analysis_progress.setRange(0, 3000)
+        self.analysis_progress.setTextVisible(False)
+        outer.addWidget(self.analysis_progress)
+        actions = QHBoxLayout()
+        self.analysis_label = label("", "muted")
+        actions.addWidget(self.analysis_label, 1)
+        self.continue_button = button("CONTINUAR  →", self.continue_trial)
+        actions.addWidget(self.continue_button)
+        outer.addLayout(actions)
+        self.stack.addWidget(page)
+
+    def _build_finished(self):
+        page = QWidget()
+        outer = QVBoxLayout(page)
+        outer.setContentsMargins(0, 0, 0, 0)
+        summary, content = card()
+        self.final_title = label("", "heading", True)
+        self.final_metric = label("", "metric", True)
+        self.final_detail = label("", "muted", True)
+        for widget in (self.final_title, self.final_metric, self.final_detail):
+            content.addWidget(widget)
+        outer.addWidget(summary)
+        middle = QHBoxLayout()
+        rank_frame, content = card()
+        content.addWidget(label("CLASIFICACIÓN / TOP 10", "heading"))
+        self.table = QTableWidget(0, 6)
+        self.table.setHorizontalHeaderLabels(["#", "Piloto", "IAE (°·s)", "Kp / Ki / Kd", "Estado", "Fecha"])
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setAlternatingRowColors(True)
+        self.table.verticalHeader().hide()
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        content.addWidget(self.table)
+        content.addWidget(label("Tu resultado se incluye aunque quede fuera del top 10.", "muted", True))
+        middle.addWidget(rank_frame, 3)
+        self.ranking_chart = QChartView(QChart())
+        self.ranking_chart.setBackgroundBrush(QColor("#12243a"))
+        self.ranking_chart.setFrameShape(QFrame.Shape.NoFrame)
+        self.ranking_chart.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self.ranking_chart.setMinimumWidth(300)
+        middle.addWidget(self.ranking_chart, 2)
+        outer.addLayout(middle, 1)
+        self.save_warning = label("", "muted", True)
+        outer.addWidget(self.save_warning)
+        actions = QHBoxLayout()
+        actions.addStretch()
+        self.new_button = button("Nueva partida", self.new_game)
+        actions.addWidget(self.new_button)
+        actions.addWidget(button("SALIR", self.close, True))
+        outer.addLayout(actions)
+        self.stack.addWidget(page)
+
+    def start_game(self):
+        self.game.begin(self.alias_edit.text())
+        self.stack.setCurrentIndex(1)
+        for control, value in zip(self.gain_controls, (.1, 0, 0)):
+            control.spin.setValue(value)
+        self.attempt_strip.results, self.attempt_strip.active = [], -1
+        self.attempt_strip.playing = True
+        self.attempt_strip.update()
+        self.attempt_label.setText("Demostración")
+        self.phase_label.setText("PID inicial · sin gastar intentos")
+        self.edit_note.setText("Observa la respuesta al impulso.")
+        self._set_editing(False)
+        self.skip_button.setVisible(self.game.demo_seen)
+        self._start_playback(simulate(DEMO_GAINS))
+
+    def _set_editing(self, editing):
+        for control in self.gain_controls:
+            control.setEnabled(editing)
+        self.run_button.setEnabled(editing)
+        self.speed_combo.setEnabled(editing)
+
+    def _start_playback(self, result):
+        self.active_result = result
+        self.playback_rate = self.speed_combo.currentData()
+        self.paused_at, self.pause_total_ms = None, 0
+        self.pause_button.setEnabled(True)
+        self.pause_button.setText("Pausar")
+        self.cumulative_iae = [0.0]
+        for a, b in zip(result.samples, result.samples[1:]):
+            self.cumulative_iae.append(self.cumulative_iae[-1] +
+                iae_segment(a, b))
+        self.response_chart.clear()
+        self.playback_active = True
+        self.playback_clock.start()
+        self._render_sample(0, preparing=True)
+
+    def toggle_pause(self):
+        if not self.playback_active:
+            return
+        if self.paused_at is None:
+            self.paused_at = self.playback_clock.elapsed()
+            self.pause_button.setText("Reanudar")
+        else:
+            self.pause_total_ms += self.playback_clock.elapsed()-self.paused_at
+            self.paused_at = None
+            self.pause_button.setText("Pausar")
+
+    def skip_demo(self):
+        self.game.complete_demo(skipped=True)
+        self.playback_active = False
+        self.attempt_strip.playing = False
+        self._show_editing("Elige tus ganancias.")
+
+    def _show_editing(self, message):
+        self.stack.setCurrentIndex(1)
+        number = len(self.game.attempts)+1
+        self.attempt_label.setText("Ajusta el controlador")
+        self.phase_label.setText(f"Intento {number} de 3")
+        self.run_button.setText(f"Ejecutar intento {number}  →")
+        self._set_editing(True)
+        self.pause_button.setEnabled(False)
+        self.skip_button.hide()
+        self.edit_note.setText(message)
+        self.attempt_strip.results = list(self.game.attempts)
+        self.attempt_strip.active = len(self.game.attempts)
+        self.attempt_strip.playing = False
+        self.attempt_strip.update()
+
+    def run_trial(self):
+        for control in self.gain_controls:
+            control.spin.interpretText()
+        result = self.game.launch(Gains(*(c.spin.value() for c in self.gain_controls)))
+        self._set_editing(False)
+        self.attempt_strip.playing = True
+        self.attempt_strip.update()
+        self.attempt_label.setText("EN MARCHA")
+        self.phase_label.setText(f"{DURATION:g} s físicos · reproducción a {self.speed_combo.currentData():g}×")
+        self.edit_note.setText(f"Referencia: 0° → {STEP_DEGREES:g}° a los {STEP_TIME:g} s  ·  Tolerancia: ±5°")
+        self._start_playback(result)
+
+    def _render_sample(self, index, preparing=False):
+        result = self.active_result
+        if result is None:
+            return
+        sample = result.samples[index]
+        self.pendulum.angle = sample.angle
+        self.pendulum.reference_angle = sample.reference
+        self.pendulum.fallen = any(abs(s.angle) >= math.pi/2 for s in result.samples[:index+1])
+        self.pendulum.sample_time = -1 if preparing else sample.time
+        self.pendulum.trail = [s.angle for s in result.samples[max(0, index-250):index+1:12]]
+        self.pendulum.update()
+        self.angle_label.setText(f"{math.degrees(sample.angle):.1f}°")
+        self.time_label.setText(f"{sample.time:.2f} s")
+        self.error_label.setText(f"{self.cumulative_iae[index]:.2f} °·s")
+        for metric in (self.angle_label, self.time_label, self.error_label):
+            metric.setMinimumWidth(metric.fontMetrics().horizontalAdvance(metric.text()) + 2)
+        self.fall_label.setText("Preparando…" if preparing else
+            ("Caída registrada" if self.pendulum.fallen else
+             ("Empujón inicial · 2 rad/s" if sample.time < .2 else
+              f"Objetivo: ±5° desde {STABLE_FROM:g} s")))
+        self.progress.setValue(round(sample.time*1000))
+        self.response_chart.reveal(result, index)
+
+    def tick(self):
+        if self.playback_active and self.active_result is not None and self.paused_at is None:
+            elapsed = (self.playback_clock.elapsed()-self.pause_total_ms)/1000
+            index = min(round(DURATION*1000), max(0, int(((elapsed-PRE_ROLL)*self.playback_rate + 1e-12)/DT)))
+            self._render_sample(index, preparing=elapsed < PRE_ROLL)
+            if index == round(DURATION*1000):
+                self._complete_playback()
+        if self.stack.currentIndex() == 3:
+            remaining = max(0, self.report_ready_at-time.monotonic())
+            self.continue_button.setEnabled(remaining <= 0)
+            self.analysis_progress.setValue(round(3000-min(3, remaining)*1000))
+            self.analysis_label.setText(f"Preparando  ·  {math.ceil(remaining)} s" if remaining else
+                                        "Listo para continuar")
+            self.continue_button.setText("Ver ranking  →" if self.game.state is State.FINISHED else "Siguiente intento  →")
+
+    def _complete_playback(self):
+        self.playback_active = False
+        self.attempt_strip.playing = False
+        self.attempt_strip.update()
+        self.pause_button.setEnabled(False)
+        if self.game.phase is Phase.DEMO:
+            self.game.complete_demo()
+            self._show_editing("Tu turno: ajusta Kp, Ki y Kd.")
+            return
+        self.game.finish_playback(time.monotonic())
+        if self.game.state is State.FINISHED:
+            self.ranking.add_game(self.game)
+        self.show_report()
+
+    def _report_motion_changed(self, preference):
+        if preference == Qt.MotionPreference.ReducedMotion:
+            self.report_animation.stop()
+            self.report_score_effect.setOpacity(1.0)
+            self.report_hint_effect.setOpacity(1.0)
+
+    def show_report(self):
+        result = self.game.attempts[-1]
+        number = len(self.game.attempts)
+        self.report_title.setText(f"INTENTO {number:02d}  /  {'ESTABLE' if result.success else 'SIN EQUILIBRIO'}")
+        self.report_iae.setText(f"{result.iae:.2f}")
+        self.report_trace.result = result
+        self.report_trace.update()
+        self.report_gains.gains = result.gains
+        self.report_gains.update()
+        self.report_strip.results, self.report_strip.active = list(self.game.attempts), -1
+        self.report_strip.update()
+        self.report_strip.play()
+        if number > 1:
+            delta = self.game.attempts[-2].iae-result.iae
+        else:
+            delta = None
+        if delta is None:
+            comparison = "Primer registro"
+        elif abs(delta) < .005:
+            comparison = "IAE igual al intento anterior"
+        else:
+            comparison = f"{abs(delta):.2f} °·s {'menos' if delta > 0 else 'más'} que el intento anterior"
+        self.report_delta.setText(comparison)
+        self.report_status.setText("Error dentro de ±5° durante el último segundo." if result.success else
+            (f"Caída registrada a ±90° · análisis completo de {DURATION:g} s." if result.fallen else
+             "Fuera de ±5° en el último segundo."))
+        self.guide_title.setText("LECTURA" if result.success else "PISTA")
+        self.feedback_label.setText(("Buen control: el error se mantuvo dentro de ±5° en el último segundo."
+            if number < 3 else "Estable. Este intento entra al ranking.")
+            if result.success else hint(result))
+        self.report_ready_at = max(time.monotonic()+3, self.game.ready_at)
+        self.continue_button.setEnabled(False)
+        self.stack.setCurrentIndex(3)
+        self.report_animation.stop()
+        if motion.reduced_motion():
+            self.report_score_effect.setOpacity(1.0)
+            self.report_hint_effect.setOpacity(1.0)
+        else:
+            self.report_score_effect.setOpacity(.18)
+            self.report_hint_effect.setOpacity(.12)
+            self.report_animation.start()
+        self.report_sweep.play()
+        self.tick()
+
+    def continue_trial(self):
+        if time.monotonic() < self.report_ready_at:
+            return
+        if self.game.state is State.FINISHED:
+            self.show_results()
+        else:
+            self.game.continue_editing(time.monotonic())
+            self._show_editing("Ajusta y vuelve a probar.")
+
+    def show_results(self):
+        current = self.ranking.add_game(self.game)
+        ordered = self.ranking.ordered()
+        rank = next(i+1 for i, r in enumerate(ordered) if r["id"] == current["id"])
+        result = self.game.final
+        self.final_title.setText(f"CLASIFICACIÓN / {self.game.alias}")
+        self.final_metric.setText(f"{result.iae:.2f} °·s   ·   puesto {rank} de {len(ordered)}")
+        state = "Estabilización lograda" if result.success else ("Caída registrada" if result.fallen else "Fuera del criterio de estabilidad")
+        self.final_detail.setText(f"Tercer intento · {state} · Menor IAE es mejor")
+        self.save_warning.setText(self.ranking.warning)
+        rows = ordered[:10] + ([current] if rank > 10 else [])
+        self.table.setRowCount(len(rows))
+        for row, record in enumerate(rows):
+            actual = record["id"] == current["id"]
+            gains = record["gains"]
+            status = "Estable" if record["success"] else ("Caída" if record["fallen"] else "No estable")
+            values = [str(ordered.index(record)+1), ("(actual) " if actual else "") + record["alias"],
+                      f"{record['iae']:.2f}", f"{gains['kp']:.2f} / {gains['ki']:.2f} / {gains['kd']:.2f}", status, record["date"][:10]]
+            for col, text in enumerate(values):
+                item = QTableWidgetItem(text)
+                item.setToolTip(record["date"])
+                if actual:
+                    item.setBackground(QColor("#27483d"))
+                    item.setForeground(QColor(GREEN))
+                self.table.setItem(row, col, item)
+            if actual:
+                self.current_ranking_row = row
+        self._draw_ranking(rows, ordered, current)
+        self.stack.setCurrentIndex(2)
+        QTimer.singleShot(0, self._reveal_current_ranking)
+
+    def _reveal_current_ranking(self):
+        if self.stack.currentIndex() == 2 and self.current_ranking_row is not None:
+            self.table.scrollToItem(self.table.item(self.current_ranking_row, 1))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, "stack"):
+            QTimer.singleShot(0, self._reveal_current_ranking)
+
+    def _draw_ranking(self, rows, ordered, current):
+        chart = QChart()
+        prepare_chart(chart)
+        values = [r["iae"] for r in rows]
+        positive = [value for value in values if value > 0]
+        logarithmic = bool(positive) and max(values) > 30 * max(min(positive), .01)
+        display_value = (lambda value: math.log10(1 + value)) if logarithmic else (lambda value: value)
+        chart.setTitle("IAE POR PUESTO / ESCALA LOGARÍTMICA" if logarithmic
+                       else "IAE POR PUESTO / MENOR ES MEJOR")
+        historical, actual = QBarSet("Histórico"), QBarSet("Actual")
+        historical.setColor(QColor("#326eab"))
+        actual.setColor(QColor(GREEN))
+        categories = []
+        for record in rows:
+            categories.append(str(ordered.index(record)+1))
+            is_current = record["id"] == current["id"]
+            historical.append(0 if is_current else display_value(record["iae"]))
+            actual.append(display_value(record["iae"]) if is_current else 0)
+        series = QBarSeries()
+        series.append(historical)
+        series.append(actual)
+        chart.addSeries(series)
+        x, y = QBarCategoryAxis(), QValueAxis()
+        x.append(categories)
+        x.setTitleText("Puesto / verde = actual")
+        y.setRange(0, max(1, display_value(max(values))*1.15))
+        y.setLabelFormat("%.1f")
+        y.setTitleText("log₁₀(1 + IAE)" if logarithmic else "IAE (°·s)")
+        for axis, alignment in ((x, Qt.AlignmentFlag.AlignBottom), (y, Qt.AlignmentFlag.AlignLeft)):
+            chart.addAxis(axis, alignment)
+            axis.setLabelsColor(QColor(MUTED))
+            axis.setTitleBrush(QColor(MUTED))
+            axis.setGridLineColor(QColor("#30475b"))
+            series.attachAxis(axis)
+        old = self.ranking_chart.chart()
+        self.ranking_chart.setChart(chart)
+        old.deleteLater()
+
+    def new_game(self):
+        self.game.reset()
+        self.stack.setCurrentIndex(0)
+        self.start_warning.setText(self.ranking.warning)
+
+
+def main():
+    app = QApplication(sys.argv)
+    app.setApplicationName("PID / Control Arena")
+    configure_app(app)
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec())
