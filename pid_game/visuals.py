@@ -79,7 +79,7 @@ class AttemptStrip(QWidget):
             p.drawText(QRectF(x, 10, number_width, 44), Qt.AlignmentFlag.AlignVCenter, f"0{i+1}")
             text_width = max(1, width - number_width)
             label = "RESULTADO" if done else (("EN JUEGO" if self.playing else "AJUSTANDO") if current else "PENDIENTE")
-            value = f"{self.results[i].iae:.2f} °·s" if done else ("Ajusta tu PID" if current else "—")
+            value = f"{self.results[i].iae:.2f} pts" if done else ("Ajusta tu PID" if current else "—")
             for font, text, y, text_color in ((label_font, label, 12, color),
                                                (value_font, value, 33, TEXT if done or current else MUTED)):
                 p.setFont(font)
@@ -202,7 +202,9 @@ class ResponseChart(QWidget):
         key = QHBoxLayout()
         key.setSpacing(6)
         for color, caption in ((CYAN, "SALIDA θ(t)"), (GREEN, "REFERENCIA"),
-                               ("#79b78d", "TOLERANCIA ±5°"), (CORAL, "EMPUJÓN · 2 rad/s")):
+                               ("#79b78d", "MARGEN DE ESTABILIDAD: ±5°"),
+                               (BLUE, "ESCALÓN 8° (5 s)"),
+                               (CORAL, "EMPUJÓN · 2 rad/s")):
             swatch = QFrame()
             swatch.setFixedSize(16, 3)
             swatch.setStyleSheet(f"background: {color}; border: none;")
@@ -227,11 +229,11 @@ class ResponseChart(QWidget):
         from .simulation import DURATION, STABLE_FROM, STEP_TIME, STEP_DEGREES
         x_min, x_max = -.3, DURATION
         x.setRange(x_min, x_max)
-        x.setTickCount(8)
+        x.setTickCount(9)
         x.setTickType(QValueAxis.TickType.TicksDynamic)
         x.setTickAnchor(0)
-        x.setTickInterval(1)
-        x.setLabelFormat("%.1f")
+        x.setTickInterval(2)
+        x.setLabelFormat("%.0f")
         y.setRange(-8, 8)
         y.setTickCount(5)
         y.setLabelFormat("%.0f")
@@ -252,22 +254,46 @@ class ResponseChart(QWidget):
             series.append(STEP_TIME, STEP_DEGREES+offset); series.append(x_max, STEP_DEGREES+offset)
         self.band_upper, self.band_lower = upper, lower
         band = QAreaSeries(upper, lower)
-        band.setBrush(QColor(130, 205, 93, 24))
+        band.setBrush(QColor(130, 205, 93, 20))
         band.setPen(QPen(QColor("#79b78d"), .5))
         series_list.append(band)
-        # Ventana de evaluación destacada al final del ensayo.
+
+        # Ventana 1 de evaluación: estabilización del empujón [4, 5] s
+        w1_upper, w1_lower = QLineSeries(), QLineSeries()
+        w1_upper.append(4.0, 5); w1_upper.append(5.0, 5)
+        w1_lower.append(4.0, -5); w1_lower.append(5.0, -5)
+        self.w1_upper, self.w1_lower = w1_upper, w1_lower
+        w1_band = QAreaSeries(w1_upper, w1_lower)
+        w1_band.setBrush(QColor(161, 214, 90, 26))
+        w1_band.setPen(QPen(QColor(GREEN), .6))
+        series_list.append(w1_band)
+
+        w1_mark = QLineSeries()
+        w1_mark.append(4.0, -10000); w1_mark.append(4.0, 10000)
+        w1_mark.setPen(QPen(QColor(GREEN), 1, Qt.PenStyle.DotLine))
+        series_list.append(w1_mark)
+
+        # Ventana 2 de evaluación: estabilización del escalón [14, 15] s
         stable_upper, stable_lower = QLineSeries(), QLineSeries()
         stable_upper.append(STABLE_FROM, STEP_DEGREES+5); stable_upper.append(x_max, STEP_DEGREES+5)
         stable_lower.append(STABLE_FROM, STEP_DEGREES-5); stable_lower.append(x_max, STEP_DEGREES-5)
         self.stability_upper, self.stability_lower = stable_upper, stable_lower
         stability_band = QAreaSeries(stable_upper, stable_lower)
-        stability_band.setBrush(QColor(161, 214, 90, 16))
-        stability_band.setPen(QPen(QColor(GREEN), .5))
+        stability_band.setBrush(QColor(161, 214, 90, 26))
+        stability_band.setPen(QPen(QColor(GREEN), .6))
         series_list.append(stability_band)
+
         end_window = QLineSeries()
         end_window.append(STABLE_FROM, -10000); end_window.append(STABLE_FROM, 10000)
         end_window.setPen(QPen(QColor(GREEN), 1, Qt.PenStyle.DotLine))
         series_list.append(end_window)
+
+        # Línea de escalón en t = 5.0 s
+        step_line = QLineSeries()
+        step_line.append(STEP_TIME, -10000); step_line.append(STEP_TIME, 10000)
+        step_line.setPen(QPen(QColor(BLUE), 1.2, Qt.PenStyle.DashLine))
+        series_list.append(step_line)
+
         impulse = QLineSeries()
         impulse.append(0, -10000); impulse.append(0, 10000)
         impulse.setPen(QPen(QColor(CORAL), 1.5, Qt.PenStyle.DashLine))

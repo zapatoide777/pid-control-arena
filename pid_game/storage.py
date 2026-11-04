@@ -9,7 +9,7 @@ from .controller import Gains
 from .game import Game
 
 # Identifica planta, prueba, PID y métrica. Cambiar si se cambia el desafío.
-CHALLENGE = "pivot-v7-dcmotor-r2-l.16-k.333-v12-i6-coulomb.015-step4-8deg-w2-T10-dt.001-iae-deg"
+CHALLENGE = "pivot-v8-dcmotor-r2-l.16-k.333-v12-i6-coulomb.015-step5-8deg-w2-T15-dt.001-iae-deg"
 
 
 class Ranking:

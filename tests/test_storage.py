@@ -131,3 +131,13 @@ def test_previous_instant_actuator_challenge_is_archived(tmp_path):
     assert not ranking.records and "incompatible" in ranking.warning
     backups = list(tmp_path.glob("ranking.json.backup-*"))
     assert len(backups) == 1 and json.loads(backups[0].read_text()) == old
+
+
+def test_previous_v7_ten_second_challenge_is_archived(tmp_path):
+    path = tmp_path / "ranking.json"
+    old = {"schema": 1, "challenge": "pivot-v7-dcmotor-r2-l.16-k.333-v12-i6-coulomb.015-step4-8deg-w2-T10-dt.001-iae-deg", "records": []}
+    path.write_text(json.dumps(old), encoding="utf-8")
+    ranking = Ranking(path)
+    assert not ranking.records and "incompatible" in ranking.warning
+    backups = list(tmp_path.glob("ranking.json.backup-*"))
+    assert len(backups) == 1 and json.loads(backups[0].read_text()) == old

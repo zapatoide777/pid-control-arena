@@ -4,13 +4,13 @@ from .controller import Gains, PID
 from .physics import Plant
 from .actuator import DCMotor
 
-"""Desafío de 10 s; la reproducción visual no altera el horizonte físico."""
-DURATION = 10.0
+"""Desafío de 15 s; la reproducción visual no altera el horizonte físico."""
+DURATION = 15.0
 DT = 0.001
 BAND = 5.0
 STABILITY_WINDOW = 1.0
 STABLE_FROM = DURATION - STABILITY_WINDOW
-STEP_TIME = 4.0
+STEP_TIME = 5.0
 STEP_DEGREES = 8.0
 
 def reference_at(time: float) -> float:
@@ -53,8 +53,12 @@ def iae_segment(a: Sample, b: Sample) -> float:
 def evaluate(samples: tuple[Sample, ...]) -> tuple[float, bool, bool]:
     iae = sum(iae_segment(a, b) for a, b in zip(samples, samples[1:]))
     fallen = any(abs(s.angle) >= math.pi / 2 for s in samples)
-    tail = [s for s in samples if s.time >= STABLE_FROM - 1e-10]
-    stable = bool(tail) and all(abs(math.degrees(s.angle-s.reference)) <= BAND for s in tail)
+    # Doble ventana de estabilidad: [4, 5] s para el empujón inicial y [14, 15] s para el escalón
+    w1 = [s for s in samples if 4.0 - 1e-10 <= s.time <= 5.0 - 1e-10]
+    w2 = [s for s in samples if 14.0 - 1e-10 <= s.time <= 15.0 + 1e-10]
+    stable_w1 = (not w1) or all(abs(math.degrees(s.angle-s.reference)) <= BAND for s in w1)
+    stable_w2 = bool(w2) and all(abs(math.degrees(s.angle-s.reference)) <= BAND for s in w2)
+    stable = stable_w1 and stable_w2
     return iae, stable and not fallen, fallen
 
 

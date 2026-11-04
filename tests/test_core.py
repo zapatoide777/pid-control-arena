@@ -66,6 +66,13 @@ def test_iae_absolute_and_full_window_stability():
     assert evaluate(boundary)[1]
     spike = boundary[:2] + (Sample(STABLE_FROM+.5, math.radians(5.01), 0, 0),) + boundary[2:]
     assert not evaluate(spike)[1]
+    spike_w1 = (Sample(0, 0, 1, 0), Sample(4.5, math.radians(5.01), 0, 0),
+                Sample(STABLE_FROM, 0, 0, 0), Sample(DURATION, 0, 0, 0))
+    assert not evaluate(spike_w1)[1]
+    both_windows = (Sample(0, 0, 1, 0), Sample(4.2, math.radians(4.9), 0, 0),
+                    Sample(4.8, math.radians(-4.8), 0, 0),
+                    Sample(STABLE_FROM, math.radians(5), 0, 0), Sample(DURATION, 0, 0, 0))
+    assert evaluate(both_windows)[1]
     early_fall = (Sample(0, 0, 0, 0), Sample(1, math.pi/2, 0, 0)) + boundary[1:]
     assert evaluate(early_fall)[2]
     assert not evaluate(early_fall)[1]
@@ -186,17 +193,17 @@ def test_dc_motor_electrical_response_back_emf_and_limits():
 
 
 def test_reference_step_error_integral_and_derivative_no_kick():
-    assert STEP_TIME == 4 and STEP_DEGREES == 8
-    old = Sample(3.999, 0, 0, 0, 0)
-    changed = Sample(4.0, 0, 0, 0, math.radians(8))
-    after = Sample(4.001, 0, 0, 0, math.radians(8))
+    assert STEP_TIME == 5 and STEP_DEGREES == 8
+    old = Sample(4.999, 0, 0, 0, 0)
+    changed = Sample(5.0, 0, 0, 0, math.radians(8))
+    after = Sample(5.001, 0, 0, 0, math.radians(8))
     assert iae_segment(old, changed) == 0
     assert iae_segment(changed, after) == pytest.approx(.008)
     pid = PID(Gains(0, 0, 1))
     assert pid.command(0, 0, .001, math.radians(8)) == 0
     result = simulate(Gains(2, .2, .4))
-    assert result.samples[3999].reference == 0
-    assert result.samples[4000].reference == pytest.approx(math.radians(8))
+    assert result.samples[4999].reference == 0
+    assert result.samples[5000].reference == pytest.approx(math.radians(8))
     assert result.iae == pytest.approx(sum(iae_segment(a,b) for a,b in zip(result.samples,result.samples[1:])))
 
 

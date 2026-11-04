@@ -27,40 +27,48 @@ STYLE = """
 QWidget { font-family: '__BODY__'; font-size: 13px; color: #ecf5fa; }
 QMainWindow, QWidget#root { background: #0a1728; }
 QFrame#card { background: transparent; border: none; }
+QFrame#instrumentPanel { background: #0c1c2e; border: 1px solid #1a334b; border-radius: 8px; }
+QFrame#dockPanel { background: #0c1c2e; border: 1px solid #1a334b; border-radius: 8px; }
+QFrame#modalCard { background: #102238; border: 1px solid #23435f; border-radius: 12px; }
+QFrame#modalInner { background: #0c1a2c; border: 1px solid #1a324a; border-radius: 8px; }
 QLabel { background: transparent; }
-QLabel#brand { color: #a7e35c; font-size: 12px; font-weight: 600; }
-QLabel#title { font-family: '__DISPLAY__'; font-size: 27px; font-weight: 700; letter-spacing: 1px; }
-QLabel#hero { font-family: '__DISPLAY__'; font-size: 52px; font-weight: 700; }
-QLabel#heading { font-family: '__DISPLAY__'; font-size: 21px; font-weight: 600; }
-QLabel#muted { color: #a9bfce; }
-QLabel#metric { font-family: '__DATA__'; font-size: 25px; font-weight: 600; color: #6adcf1; }
-QLabel#telemetry { font-family: '__DATA__'; font-size: 21px; font-weight: 600; color: #6adcf1; }
-QLabel#telemetrySmall { font-family: '__DATA__'; font-size: 15px; font-weight: 600; color: #6adcf1; }
-QLabel#score { font-family: '__DATA__'; font-size: 68px; font-weight: 700; color: #a7e35c; }
-QPushButton { background: #a7e35c; color: #10281c; border: 1px solid #a7e35c; border-radius: 3px; padding: 10px 17px; min-height: 20px; font-weight: 700; }
-QPushButton:hover { background: #c7f182; }
+QLabel#brand { font-family: '__BODY__'; color: #a7e35c; font-size: 11px; font-weight: 700; letter-spacing: 0.8px; }
+QLabel#title { font-family: '__DISPLAY__'; font-size: 26px; font-weight: 700; letter-spacing: 1.5px; }
+QLabel#hero { font-family: '__DISPLAY__'; font-size: 50px; font-weight: 700; }
+QLabel#heading { font-family: '__DISPLAY__'; font-size: 20px; font-weight: 600; letter-spacing: 0.5px; }
+QLabel#muted { font-family: '__BODY__'; color: #8faec4; font-size: 12px; }
+QLabel#metric { font-family: '__DATA__'; font-size: 24px; font-weight: 600; color: #5dd8f0; }
+QLabel#telemetry { font-family: '__DATA__'; font-size: 21px; font-weight: 600; color: #5dd8f0; }
+QLabel#telemetrySmall { font-family: '__DATA__'; font-size: 15px; font-weight: 600; color: #5dd8f0; }
+QLabel#score { font-family: '__DATA__'; font-size: 64px; font-weight: 700; color: #a7e35c; }
+QPushButton { background: #a7e35c; color: #0d2217; border: 1px solid #a7e35c; border-radius: 4px; padding: 10px 18px; min-height: 22px; font-weight: 700; font-family: '__BODY__'; }
+QPushButton:hover { background: #c2f07c; }
 QPushButton:focus, QComboBox:focus, QSlider:focus { border: 2px solid #5dd8f0; }
-QPushButton:disabled { background: #1b3042; color: #738b99; border-color: #31495a; }
-QPushButton#secondary { background: #1a3046; color: #e4f2f8; border: 1px solid #3e6175; }
-QPushButton#secondary:disabled { color: #708797; border-color: #2a4152; }
-QLineEdit, QDoubleSpinBox, QComboBox { background: #102238; border: 1px solid #45677a; border-radius: 3px; padding: 7px; min-height: 24px; color: #edf7fc; selection-background-color: #267ea2; }
-QLineEdit:focus, QDoubleSpinBox:focus { border: 1px solid #a7e35c; }
-QDoubleSpinBox { font-family: '__DATA__'; font-size: 21px; }
-QDoubleSpinBox QLineEdit { padding: 0; border: none; background: transparent; min-height: 0; font-size: 24px; }
-QDoubleSpinBox:disabled, QDoubleSpinBox QLineEdit:disabled { color: #a1b4be; }
-QDoubleSpinBox::up-button, QDoubleSpinBox::down-button { background: #294558; width: 18px; }
+QPushButton:disabled { background: #162a3a; color: #617b8c; border-color: #274054; }
+QPushButton#secondary { background: #13273a; color: #e4f2f8; border: 1px solid #2b4961; }
+QPushButton#secondary:hover { background: #1c364e; border-color: #3f6888; }
+QPushButton#secondary:disabled { color: #5d7585; border-color: #203647; }
+QLineEdit, QComboBox { background: #0c1a2a; border: 1px solid #1e374f; border-radius: 4px; padding: 7px; min-height: 24px; color: #edf7fc; selection-background-color: #267ea2; }
+QLineEdit:focus, QComboBox:focus { border: 1px solid #5dd8f0; }
+QDoubleSpinBox { background: #0c1a2a; border: 1px solid #1e374f; border-radius: 6px; padding: 4px; min-height: 28px; color: #edf7fc; font-family: '__DATA__'; font-size: 21px; selection-background-color: #267ea2; }
+QDoubleSpinBox:focus { border: 1px solid #5dd8f0; }
+QDoubleSpinBox QLineEdit { padding: 0 4px; border: none; background: transparent; min-height: 0; font-size: 21px; }
+QDoubleSpinBox:disabled, QDoubleSpinBox QLineEdit:disabled { color: #6a8292; }
+QDoubleSpinBox::up-button, QDoubleSpinBox::down-button { background: #162c3f; border: none; width: 20px; border-radius: 3px; }
+QDoubleSpinBox::up-button:hover, QDoubleSpinBox::down-button:hover { background: #234563; }
 QComboBox QAbstractItemView { background: #102238; color: #edf7fc; selection-background-color: #326eab; }
-QSlider::groove:horizontal { height: 5px; background: #334c5d; border-radius: 2px; }
-QSlider::sub-page:horizontal { background: #55c7e5; border-radius: 2px; }
-QSlider::handle:horizontal { background: #a7e35c; border: 2px solid #183044; width: 17px; margin: -7px 0; border-radius: 9px; }
-QProgressBar { background: #273e50; border: none; border-radius: 3px; min-height: 6px; max-height: 6px; }
-QProgressBar::chunk { background: #a7e35c; border-radius: 3px; }
-QTableWidget { background: #12243a; color: #edf7fc; border: none; gridline-color: #2c4354; alternate-background-color: #182d43; selection-background-color: #28506b; }
-QHeaderView::section { background: #213c50; color: #d5e8ef; border: none; padding: 10px 6px; }
+QSlider::groove:horizontal { height: 4px; background: #1a3246; border-radius: 2px; }
+QSlider::sub-page:horizontal { background: #3d90d5; border-radius: 2px; }
+QSlider::handle:horizontal { background: #a7e35c; border: 2px solid #0a1728; width: 16px; margin: -6px 0; border-radius: 8px; }
+QSlider::handle:horizontal:hover { background: #c7f182; }
+QProgressBar { background: #162b3d; border: none; border-radius: 3px; min-height: 6px; max-height: 6px; }
+QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #5dd8f0, stop:1 #a7e35c); border-radius: 3px; }
+QTableWidget { background: #0c1a2c; color: #edf7fc; border: 1px solid #1a334b; border-radius: 6px; gridline-color: #1a334b; alternate-background-color: #102338; selection-background-color: #234d6e; }
+QHeaderView::section { background: #162c40; color: #d5e8ef; border: none; padding: 10px 6px; font-weight: 600; }
 QScrollArea, QScrollArea > QWidget > QWidget { background: transparent; border: none; }
-QScrollBar:vertical { background: #172e40; width: 12px; margin: 0; border-radius: 6px; }
-QScrollBar::handle:vertical { background: #7bb4c5; min-height: 32px; border-radius: 6px; }
-QScrollBar::handle:vertical:hover { background: #a7e35c; }
+QScrollBar:vertical { background: #112334; width: 10px; margin: 0; border-radius: 5px; }
+QScrollBar::handle:vertical { background: #406782; min-height: 32px; border-radius: 5px; }
+QScrollBar::handle:vertical:hover { background: #5dd8f0; }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; background: none; border: none; }
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
 """
@@ -140,6 +148,25 @@ class GainControl(QWidget):
         self.spin.setValue(value)
         layout.addWidget(self.slider)
         layout.addWidget(label(unit, "muted"))
+
+
+class ReportOverlayPage(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.backdrop = None
+
+    def set_backdrop(self, pixmap):
+        self.backdrop = pixmap
+        self.update()
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if self.backdrop and not self.backdrop.isNull():
+            p.drawPixmap(0, 0, self.backdrop)
+        else:
+            p.fillRect(self.rect(), QColor(BG))
+        p.fillRect(self.rect(), QColor(10, 23, 40, 218))
 
 
 class MainWindow(QMainWindow):
@@ -234,15 +261,16 @@ class MainWindow(QMainWindow):
         self.response_chart = ResponseChart()
         workspace.addWidget(self.response_chart, 8)
         instrument, content = card()
-        content.setContentsMargins(8, 0, 8, 0)
+        content.setContentsMargins(12, 10, 12, 10)
         instrument.setMinimumWidth(285)
+        instrument.setObjectName("instrumentPanel")
         self.pendulum = PendulumView(length_scale=1.4)
         content.addWidget(self.pendulum, 1)
         telemetry = QHBoxLayout()
         telemetry.setSpacing(16)
         self.angle_label = label("0.0°", "telemetry")
         self.time_label = label("0.00 s", "telemetry")
-        self.error_label = label("0.00 °·s", "telemetrySmall")
+        self.error_label = label("0.00 pts", "telemetrySmall")
         self.angle_caption = label("Ángulo", "muted")
         self.time_caption = label(f"Tiempo / {DURATION:g} s", "muted")
         for caption, metric in ((self.angle_caption, self.angle_label),
@@ -253,7 +281,7 @@ class MainWindow(QMainWindow):
             telemetry.addLayout(col, 1)
         content.addLayout(telemetry)
         iae_row = QHBoxLayout()
-        iae_row.addWidget(label("IAE", "muted"))
+        iae_row.addWidget(label("PUNTAJE (IAE)", "muted"))
         iae_row.addWidget(self.error_label)
         iae_row.addStretch()
         content.addLayout(iae_row)
@@ -266,7 +294,8 @@ class MainWindow(QMainWindow):
         self.progress.setTextVisible(False)
         outer.addWidget(self.progress)
         dock, content = card()
-        content.setContentsMargins(14, 10, 14, 10)
+        dock.setObjectName("dockPanel")
+        content.setContentsMargins(16, 12, 16, 12)
         row = QHBoxLayout()
         self.gain_controls = [GainControl("Kp", "corrección", "N·m/rad", 10, .1),
                               GainControl("Ki", "acumulación", "N·m/(rad·s)", 5, 0),
@@ -293,43 +322,66 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(page)
 
     def _build_report(self):
-        page = QWidget()
-        outer = QVBoxLayout(page)
-        outer.setContentsMargins(45, 12, 45, 12)
-        outer.setSpacing(18)
+        self.report_page = ReportOverlayPage()
+        outer = QVBoxLayout(self.report_page)
+        outer.setContentsMargins(40, 16, 40, 16)
+        outer.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.modal_card = QFrame()
+        self.modal_card.setObjectName("modalCard")
+        self.modal_card.setMaximumWidth(880)
+        modal_layout = QVBoxLayout(self.modal_card)
+        modal_layout.setContentsMargins(28, 22, 28, 20)
+        modal_layout.setSpacing(14)
+        outer.addWidget(self.modal_card)
+
         self.report_title = label("ANÁLISIS DEL INTENTO", "heading")
-        outer.addWidget(self.report_title)
+        modal_layout.addWidget(self.report_title)
         self.report_strip = AttemptStrip()
-        outer.addWidget(self.report_strip)
+        modal_layout.addWidget(self.report_strip)
         self.report_sweep = ReportSweep()
-        outer.addWidget(self.report_sweep)
+        modal_layout.addWidget(self.report_sweep)
+
         middle = QHBoxLayout()
-        score, content = card()
-        content.addWidget(label("ERROR ACUMULADO  /  IAE", "brand"))
+        middle.setSpacing(20)
+
+        score = QFrame()
+        score.setObjectName("modalInner")
+        score_layout = QVBoxLayout(score)
+        score_layout.setContentsMargins(18, 14, 18, 14)
+        score_layout.setSpacing(6)
+        score_layout.addWidget(label("PUNTAJE DE ERROR  /  IAE", "brand"))
         self.report_iae = label("", "score")
-        content.addWidget(self.report_iae)
-        content.addWidget(label("°·s  /  menos es mejor", "muted"))
+        score_layout.addWidget(self.report_iae)
+        score_layout.addWidget(label("Puntaje de error  ·  (Menor puntaje = mejor control)", "muted"))
         self.report_delta = label("", "heading", True)
-        content.addWidget(self.report_delta)
+        score_layout.addWidget(self.report_delta)
         self.report_status = label("", "muted", True)
-        content.addWidget(self.report_status)
+        score_layout.addWidget(self.report_status)
         self.report_trace = AnalysisTrace()
-        content.addWidget(self.report_trace, 1)
-        middle.addWidget(score, 2)
-        guidance, content = card()
-        content.setAlignment(Qt.AlignmentFlag.AlignTop)
+        score_layout.addWidget(self.report_trace, 1)
+        middle.addWidget(score, 5)
+
+        guidance = QFrame()
+        guidance.setObjectName("modalInner")
+        guide_layout = QVBoxLayout(guidance)
+        guide_layout.setContentsMargins(18, 14, 18, 14)
+        guide_layout.setSpacing(8)
+        guide_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.guide_title = label("TU SIGUIENTE MOVIMIENTO", "brand")
-        content.addWidget(self.guide_title)
+        guide_layout.addWidget(self.guide_title)
         self.feedback_label = label("", wrap=True)
         self.feedback_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        self.feedback_label.setStyleSheet("font-size: 17px;")
-        content.addWidget(self.feedback_label)
-        content.addSpacing(16)
+        self.feedback_label.setStyleSheet("font-size: 16px; font-weight: 500; color: #ecf5fa; min-height: 42px;")
+        guide_layout.addWidget(self.feedback_label)
+        guide_layout.addSpacing(14)
         self.report_gains = GainReadout()
-        content.addWidget(self.report_gains)
-        content.addStretch(1)
-        middle.addWidget(guidance, 3)
-        outer.addLayout(middle, 1)
+        guide_layout.addWidget(self.report_gains)
+        guide_layout.addStretch(1)
+        middle.addWidget(guidance, 5)
+
+        modal_layout.addLayout(middle, 1)
+
         self.report_score_effect = QGraphicsOpacityEffect(score)
         self.report_hint_effect = QGraphicsOpacityEffect(self.feedback_label)
         score.setGraphicsEffect(self.report_score_effect)
@@ -351,17 +403,20 @@ class MainWindow(QMainWindow):
         hint_fade.setEasingCurve(QEasingCurve.Type.OutCubic)
         hint_sequence.addAnimation(hint_fade)
         self.report_animation.addAnimation(hint_sequence)
+
         self.analysis_progress = QProgressBar()
         self.analysis_progress.setRange(0, 3000)
         self.analysis_progress.setTextVisible(False)
-        outer.addWidget(self.analysis_progress)
+        modal_layout.addWidget(self.analysis_progress)
+
         actions = QHBoxLayout()
         self.analysis_label = label("", "muted")
         actions.addWidget(self.analysis_label, 1)
         self.continue_button = button("CONTINUAR  →", self.continue_trial)
         actions.addWidget(self.continue_button)
-        outer.addLayout(actions)
-        self.stack.addWidget(page)
+        modal_layout.addLayout(actions)
+
+        self.stack.addWidget(self.report_page)
 
     def _build_finished(self):
         page = QWidget()
@@ -378,7 +433,7 @@ class MainWindow(QMainWindow):
         rank_frame, content = card()
         content.addWidget(label("CLASIFICACIÓN / TOP 10", "heading"))
         self.table = QTableWidget(0, 6)
-        self.table.setHorizontalHeaderLabels(["#", "Piloto", "IAE (°·s)", "Kp / Ki / Kd", "Estado", "Fecha"])
+        self.table.setHorizontalHeaderLabels(["#", "Piloto", "Puntaje (IAE)", "Kp / Ki / Kd", "Estado", "Fecha"])
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setAlternatingRowColors(True)
@@ -482,7 +537,7 @@ class MainWindow(QMainWindow):
         self.attempt_strip.update()
         self.attempt_label.setText("EN MARCHA")
         self.phase_label.setText(f"{DURATION:g} s físicos · reproducción a {self.speed_combo.currentData():g}×")
-        self.edit_note.setText(f"Referencia: 0° → {STEP_DEGREES:g}° a los {STEP_TIME:g} s  ·  Tolerancia: ±5°")
+        self.edit_note.setText(f"Referencia: 0° → {STEP_DEGREES:g}° a los {STEP_TIME:g} s  ·  Margen de estabilidad: ±5°")
         self._start_playback(result)
 
     def _render_sample(self, index, preparing=False):
@@ -498,13 +553,13 @@ class MainWindow(QMainWindow):
         self.pendulum.update()
         self.angle_label.setText(f"{math.degrees(sample.angle):.1f}°")
         self.time_label.setText(f"{sample.time:.2f} s")
-        self.error_label.setText(f"{self.cumulative_iae[index]:.2f} °·s")
+        self.error_label.setText(f"{self.cumulative_iae[index]:.2f} pts")
         for metric in (self.angle_label, self.time_label, self.error_label):
             metric.setMinimumWidth(metric.fontMetrics().horizontalAdvance(metric.text()) + 2)
         self.fall_label.setText("Preparando…" if preparing else
             ("Caída registrada" if self.pendulum.fallen else
              ("Empujón inicial · 2 rad/s" if sample.time < .2 else
-              f"Objetivo: ±5° desde {STABLE_FROM:g} s")))
+              "Margen de estabilidad: ±5°")))
         self.progress.setValue(round(sample.time*1000))
         self.response_chart.reveal(result, index)
 
@@ -562,19 +617,20 @@ class MainWindow(QMainWindow):
         if delta is None:
             comparison = "Primer registro"
         elif abs(delta) < .005:
-            comparison = "IAE igual al intento anterior"
+            comparison = "Puntaje igual al intento anterior"
         else:
-            comparison = f"{abs(delta):.2f} °·s {'menos' if delta > 0 else 'más'} que el intento anterior"
+            comparison = f"{abs(delta):.2f} pts {'menos' if delta > 0 else 'más'} que el intento anterior"
         self.report_delta.setText(comparison)
-        self.report_status.setText("Error dentro de ±5° durante el último segundo." if result.success else
+        self.report_status.setText("Error dentro del margen de estabilidad: ±5° en ambas ventanas." if result.success else
             (f"Caída registrada a ±90° · análisis completo de {DURATION:g} s." if result.fallen else
-             "Fuera de ±5° en el último segundo."))
+             "Fuera del margen de estabilidad: ±5°."))
         self.guide_title.setText("LECTURA" if result.success else "PISTA")
-        self.feedback_label.setText(("Buen control: el error se mantuvo dentro de ±5° en el último segundo."
+        self.feedback_label.setText(("Buen control: error dentro del margen de estabilidad: ±5°."
             if number < 3 else "Estable. Este intento entra al ranking.")
             if result.success else hint(result))
         self.report_ready_at = max(time.monotonic()+3, self.game.ready_at)
         self.continue_button.setEnabled(False)
+        self.report_page.set_backdrop(self.stack.widget(1).grab())
         self.stack.setCurrentIndex(3)
         self.report_animation.stop()
         if motion.reduced_motion():
@@ -602,9 +658,9 @@ class MainWindow(QMainWindow):
         rank = next(i+1 for i, r in enumerate(ordered) if r["id"] == current["id"])
         result = self.game.final
         self.final_title.setText(f"CLASIFICACIÓN / {self.game.alias}")
-        self.final_metric.setText(f"{result.iae:.2f} °·s   ·   puesto {rank} de {len(ordered)}")
+        self.final_metric.setText(f"{result.iae:.2f} pts   ·   puesto {rank} de {len(ordered)}")
         state = "Estabilización lograda" if result.success else ("Caída registrada" if result.fallen else "Fuera del criterio de estabilidad")
-        self.final_detail.setText(f"Tercer intento · {state} · Menor IAE es mejor")
+        self.final_detail.setText(f"Tercer intento · {state} · (Menor puntaje = mejor control)")
         self.save_warning.setText(self.ranking.warning)
         rows = ordered[:10] + ([current] if rank > 10 else [])
         self.table.setRowCount(len(rows))
@@ -643,8 +699,8 @@ class MainWindow(QMainWindow):
         positive = [value for value in values if value > 0]
         logarithmic = bool(positive) and max(values) > 30 * max(min(positive), .01)
         display_value = (lambda value: math.log10(1 + value)) if logarithmic else (lambda value: value)
-        chart.setTitle("IAE POR PUESTO / ESCALA LOGARÍTMICA" if logarithmic
-                       else "IAE POR PUESTO / MENOR ES MEJOR")
+        chart.setTitle("PUNTAJE DE ERROR POR PUESTO / ESCALA LOGARÍTMICA" if logarithmic
+                       else "PUNTAJE DE ERROR POR PUESTO / (MENOR PUNTAJE = MEJOR CONTROL)")
         historical, actual = QBarSet("Histórico"), QBarSet("Actual")
         historical.setColor(QColor("#326eab"))
         actual.setColor(QColor(GREEN))
@@ -663,7 +719,7 @@ class MainWindow(QMainWindow):
         x.setTitleText("Puesto / verde = actual")
         y.setRange(0, max(1, display_value(max(values))*1.15))
         y.setLabelFormat("%.1f")
-        y.setTitleText("log₁₀(1 + IAE)" if logarithmic else "IAE (°·s)")
+        y.setTitleText("log₁₀(1 + IAE)" if logarithmic else "Puntaje de error")
         for axis, alignment in ((x, Qt.AlignmentFlag.AlignBottom), (y, Qt.AlignmentFlag.AlignLeft)):
             chart.addAxis(axis, alignment)
             axis.setLabelsColor(QColor(MUTED))
