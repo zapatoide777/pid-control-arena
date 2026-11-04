@@ -68,7 +68,7 @@ window.run_trial()
 finish_run('pista-animacion')
 capture('pista')
 next_attempt()
-for control, value in zip(window.gain_controls, (2, .2, .4)):
+for control, value in zip(window.gain_controls, (2.0, 1.0, 0.5)):
     control.spin.setValue(value)
 window.run_trial()
 window._render_sample(6000)

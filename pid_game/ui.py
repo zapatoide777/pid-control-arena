@@ -297,9 +297,9 @@ class MainWindow(QMainWindow):
         dock.setObjectName("dockPanel")
         content.setContentsMargins(16, 12, 16, 12)
         row = QHBoxLayout()
-        self.gain_controls = [GainControl("Kp", "corrección", "N·m/rad", 10, .1),
-                              GainControl("Ki", "acumulación", "N·m/(rad·s)", 5, 0),
-                              GainControl("Kd", "amortiguación", "N·m·s/rad", 3, 0)]
+        self.gain_controls = [GainControl("Kp", "corrección", "N·m/rad", 10, DEMO_GAINS.kp),
+                              GainControl("Ki", "acumulación", "N·m/(rad·s)", 5, DEMO_GAINS.ki),
+                              GainControl("Kd", "amortiguación", "N·m·s/rad", 3, DEMO_GAINS.kd)]
         for control in self.gain_controls:
             row.addWidget(control, 1)
         content.addLayout(row)
@@ -441,7 +441,6 @@ class MainWindow(QMainWindow):
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         content.addWidget(self.table)
-        content.addWidget(label("Tu resultado se incluye aunque quede fuera del top 10.", "muted", True))
         middle.addWidget(rank_frame, 3)
         self.ranking_chart = QChartView(QChart())
         self.ranking_chart.setBackgroundBrush(QColor("#12243a"))
@@ -463,7 +462,7 @@ class MainWindow(QMainWindow):
     def start_game(self):
         self.game.begin(self.alias_edit.text())
         self.stack.setCurrentIndex(1)
-        for control, value in zip(self.gain_controls, (.1, 0, 0)):
+        for control, value in zip(self.gain_controls, (DEMO_GAINS.kp, DEMO_GAINS.ki, DEMO_GAINS.kd)):
             control.spin.setValue(value)
         self.attempt_strip.results, self.attempt_strip.active = [], -1
         self.attempt_strip.playing = True
@@ -729,6 +728,16 @@ class MainWindow(QMainWindow):
         self.ranking_chart.setChart(chart)
         old.deleteLater()
 
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_F11:
+            if self.isFullScreen():
+                self.showMaximized()
+            else:
+                self.showFullScreen()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
     def new_game(self):
         self.game.reset()
         self.stack.setCurrentIndex(0)
@@ -740,5 +749,5 @@ def main():
     app.setApplicationName("PID / Control Arena")
     configure_app(app)
     window = MainWindow()
-    window.show()
+    window.showMaximized()
     sys.exit(app.exec())

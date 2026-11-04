@@ -4,9 +4,9 @@ import math
 
 @dataclass(frozen=True)
 class Gains:
-    kp: float = 0.1
-    ki: float = 0.0
-    kd: float = 0.0
+    kp: float = 0.6
+    ki: float = 0.02
+    kd: float = 0.08
 
     def __post_init__(self):
         for value, limit in zip((self.kp, self.ki, self.kd), (10, 5, 3)):

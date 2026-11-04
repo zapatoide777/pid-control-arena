@@ -203,7 +203,7 @@ class ResponseChart(QWidget):
         key.setSpacing(6)
         for color, caption in ((CYAN, "SALIDA θ(t)"), (GREEN, "REFERENCIA"),
                                ("#79b78d", "MARGEN DE ESTABILIDAD: ±5°"),
-                               (BLUE, "ESCALÓN 8° (5 s)"),
+                               (BLUE, "ESCALÓN 45° (5 s)"),
                                (CORAL, "EMPUJÓN · 2 rad/s")):
             swatch = QFrame()
             swatch.setFixedSize(16, 3)
@@ -215,7 +215,7 @@ class ResponseChart(QWidget):
             key.addSpacing(5)
         key.addStretch()
         layout.addLayout(key)
-        self.full_extent = 8
+        self.full_extent = 60
         self.last_result = None
 
     def _chart(self):
@@ -234,7 +234,7 @@ class ResponseChart(QWidget):
         x.setTickAnchor(0)
         x.setTickInterval(2)
         x.setLabelFormat("%.0f")
-        y.setRange(-8, 8)
+        y.setRange(-20, 60)
         y.setTickCount(5)
         y.setLabelFormat("%.0f")
         x.setTitleText("Tiempo (s)")
@@ -319,13 +319,16 @@ class ResponseChart(QWidget):
         self.response.clear()
         self.cursor.clear()
         self.last_result = None
-        self.full_extent = 8
-        self.y.setRange(-8, 8)
+        self.full_extent = 60
+        self.y.setRange(-20, 60)
 
     def reveal(self, result, index):
         if result is not self.last_result:
-            self.full_extent = max(15, result.peak_degrees*1.12)
-            self.y.setRange(-self.full_extent, self.full_extent)
+            min_deg = min(math.degrees(s.angle) for s in result.samples)
+            max_deg = max(math.degrees(s.angle) for s in result.samples)
+            y_lower = min(-20.0, min_deg * 1.1)
+            y_upper = max(60.0, max_deg * 1.1)
+            self.y.setRange(y_lower, y_upper)
             self.last_result = result
         points = [QPointF(-.3, 0)]
         points += [QPointF(s.time, math.degrees(s.angle)) for s in result.samples[:index+1:2]]

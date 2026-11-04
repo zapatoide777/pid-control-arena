@@ -11,7 +11,7 @@ BAND = 5.0
 STABILITY_WINDOW = 1.0
 STABLE_FROM = DURATION - STABILITY_WINDOW
 STEP_TIME = 5.0
-STEP_DEGREES = 8.0
+STEP_DEGREES = 45.0
 
 # Ventana 1: estabilización tras perturbación inicial [4, 5] s
 W1_START = STEP_TIME - STABILITY_WINDOW
@@ -95,12 +95,12 @@ def hint(result: Result) -> str:
         return ""
     tail = [math.degrees(s.angle-s.reference) for s in result.samples if s.time >= 1.0]
     crossings = sum(a*b < 0 for a, b in zip(tail, tail[1:]))
+    if result.fallen:
+        return "El péndulo cayó: sube Kp poco a poco y ajusta Kd."
     if crossings >= 2:
         return "Oscila mucho: sube Kd poco a poco o baja Kp o Ki."
     if result.saturation_fraction > 0.05:
         return "El torque llegó al límite: baja las ganancias más altas."
-    if result.fallen:
-        return "El péndulo cayó: sube Kp poco a poco y ajusta Kd."
     if abs(tail[-1]) > max(5, abs(tail[0])*1.5):
         return "El error aumenta: sube Kp poco a poco y ajusta Kd."
     return "No se estabilizó: ajusta Kp y Kd, y cambia Ki con cuidado."

@@ -12,7 +12,7 @@ def completed_game(alias="Jugador", final=Gains()):
     game = Game()
     game.begin(alias)
     game.complete_demo()
-    for gains in (Gains(2, .2, .4), Gains(1, 0, .2), final):
+    for gains in (Gains(2, 1, .5), Gains(1, 0, .2), final):
         game.launch(gains)
         game.finish_playback(10)
         if len(game.attempts) < 3:
@@ -32,7 +32,7 @@ def test_missing_file_persistence_final_only_and_idempotence(tmp_path):
     assert restored.records == [record]
     assert record["iae"] == game.attempts[2].iae
     assert record["iae"] != game.attempts[0].iae
-    assert record["gains"] == {"kp": .1, "ki": 0, "kd": 0}
+    assert record["gains"] == {"kp": .6, "ki": .02, "kd": .08}
     assert record["alias"] == "María"
     assert not path.with_suffix(".json.tmp").exists()
 
@@ -41,7 +41,7 @@ def test_ranking_uses_only_iae_and_stable_tie_order(tmp_path):
     ranking = Ranking(tmp_path / "ranking.json")
     a = ranking.add_game(completed_game("primero"))
     b = ranking.add_game(completed_game("segundo"))
-    c = ranking.add_game(completed_game("tercero", Gains(2, .2, .4)))
+    c = ranking.add_game(completed_game("tercero", Gains(2, 1, .5)))
     assert [r["id"] for r in ranking.ordered()] == [c["id"], a["id"], b["id"]]
     # El flag educativo no participa en el orden.
     a["iae"], a["fallen"], a["success"] = 0.01, True, False
@@ -141,3 +141,11 @@ def test_previous_v7_ten_second_challenge_is_archived(tmp_path):
     assert not ranking.records and "incompatible" in ranking.warning
     backups = list(tmp_path.glob("ranking.json.backup-*"))
     assert len(backups) == 1 and json.loads(backups[0].read_text()) == old
+
+
+def test_previous_v8_eight_degree_challenge_is_archived(tmp_path):
+    path = tmp_path / "ranking.json"
+    old = {"schema": 1, "challenge": "pivot-v8-dcmotor-r2-l.16-k.333-v12-i6-coulomb.015-step5-8deg-w2-T15-dt.001-iae-deg", "records": []}
+    path.write_text(json.dumps(old), encoding="utf-8")
+    ranking = Ranking(path)
+    assert ranking.records == [] and "incompatible" in ranking.warning

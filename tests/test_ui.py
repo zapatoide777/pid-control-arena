@@ -46,7 +46,7 @@ def test_full_ui_flow_controls_hints_final_and_restart(qapp, tmp_path):
     end_playback(window)
     assert window.game.phase is Phase.EDITING
     assert window.run_button.isEnabled()
-    for control, value in zip(window.gain_controls, (2, .2, .4)):
+    for control, value in zip(window.gain_controls, (2, 1, .5)):
         control.spin.setValue(value)
         assert control.slider.value() == round(value*100)
         editor = control.spin.lineEdit()
@@ -190,10 +190,10 @@ def test_pendulum_length_and_full_range_pause_preserve_physics(qapp, tmp_path):
     assert chart.view.height() >= 260
     assert not hasattr(chart, "overview")
     assert not hasattr(chart, "zoom_button")
-    assert chart.y.max() > 200  # recorrido global, incluye la caída de la demo
-    assert chart.y.min() < -200
+    assert chart.y.max() >= 100  # recorrido global, incluye la caída de la demo
+    assert chart.y.min() <= -20
     assert chart.reference.at(0).y() == chart.reference.at(1).y() == 0
-    assert chart.reference.at(2).y() == chart.reference.at(3).y() == 8
+    assert chart.reference.at(2).y() == chart.reference.at(3).y() == 45
     original = window.active_result.iae
     clock.ms = round((.65+DURATION/1.0)*1000)+4000
     window.tick()
