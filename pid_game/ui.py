@@ -21,6 +21,7 @@ from . import motion
 from .theme import (BG, PLOT, SURFACE, SURFACE_RAISED, LINE, GRID, TEXT, MUTED as THEME_MUTED,
                     CYAN, BLUE, LIME, FONT_BODY, FONT_DISPLAY, FONT_DATA, FONT_FILES)
 from .visuals import PendulumView, ResponseChart, AttemptStrip, AnalysisTrace, GainReadout, prepare_chart, GREEN, MUTED
+from .guide_view import EducationalGuidePage
 
 PRE_ROLL = .65  # preparación visual, fuera del IAE
 STYLE = """
@@ -208,6 +209,7 @@ class MainWindow(QMainWindow):
         self._build_playing()
         self._build_finished()
         self._build_report()
+        self._build_guide()
         self.timer = QTimer(self)
         self.timer.setInterval(16)
         self.timer.timeout.connect(self.tick)
@@ -233,6 +235,17 @@ class MainWindow(QMainWindow):
         self.start_button = button("Jugar  →", self.start_game)
         self.start_button.setMaximumWidth(440)
         copy.addWidget(self.start_button)
+        guide_row_container = QWidget()
+        guide_row_container.setMaximumWidth(440)
+        guide_row_layout = QHBoxLayout(guide_row_container)
+        guide_row_layout.setContentsMargins(0, 4, 0, 0)
+        guide_row_layout.setSpacing(10)
+        self.iae_button = button("¿Qué es el IAE?", lambda: self.open_guide("iae"), secondary=True)
+        self.pid_guide_button = button("¿Qué hacen Kp, Ki y Kd?", lambda: self.open_guide("kp"), secondary=True)
+        guide_row_layout.addWidget(self.iae_button)
+        guide_row_layout.addWidget(self.pid_guide_button)
+        copy.addWidget(guide_row_container)
+        copy.addSpacing(6)
         copy.addWidget(label("Solo el tercer intento entra al ranking.", "muted", True))
         copy.addStretch()
         row.addLayout(copy, 5)
@@ -765,6 +778,19 @@ class MainWindow(QMainWindow):
         old = self.ranking_chart.chart()
         self.ranking_chart.setChart(chart)
         old.deleteLater()
+
+
+    def _build_guide(self):
+        self.guide_page = EducationalGuidePage(on_back=self.close_guide)
+        self.stack.addWidget(self.guide_page)
+
+    def open_guide(self, tab_id: str = "iae"):
+        self.guide_return_index = self.stack.currentIndex()
+        self.guide_page.select_tab(tab_id)
+        self.stack.setCurrentIndex(4)
+
+    def close_guide(self):
+        self.stack.setCurrentIndex(getattr(self, "guide_return_index", 0))
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_F11:
