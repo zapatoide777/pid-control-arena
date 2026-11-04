@@ -4,14 +4,14 @@ from pathlib import Path
 import sys
 import time
 from PySide6.QtCore import Qt, QTimer, QElapsedTimer, QPropertyAnimation, QEasingCurve, QParallelAnimationGroup, QSequentialAnimationGroup, QPauseAnimation
-from PySide6.QtGui import QColor, QFontDatabase, QPainter
+from PySide6.QtGui import QColor, QFontDatabase, QPainter, QBrush, QLinearGradient, QFont, QPen
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QFrame, QLineEdit, QDoubleSpinBox, QSlider, QStackedWidget,
     QProgressBar, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
     QScrollArea, QComboBox, QAbstractSpinBox, QGraphicsOpacityEffect,
 )
-from PySide6.QtCharts import QChart, QChartView, QValueAxis, QBarSeries, QBarSet, QBarCategoryAxis
+from PySide6.QtCharts import QChart, QChartView, QValueAxis, QBarSeries, QBarSet, QBarCategoryAxis, QStackedBarSeries
 from .controller import Gains, DEMO_GAINS
 from .game import Game, State, Phase
 from .simulation import simulate, hint, DURATION, STABILITY_WINDOW, STABLE_FROM, DT, STEP_TIME, STEP_DEGREES, iae_segment
@@ -41,13 +41,17 @@ QLabel#metric { font-family: '__DATA__'; font-size: 24px; font-weight: 600; colo
 QLabel#telemetry { font-family: '__DATA__'; font-size: 21px; font-weight: 600; color: #5dd8f0; }
 QLabel#telemetrySmall { font-family: '__DATA__'; font-size: 15px; font-weight: 600; color: #5dd8f0; }
 QLabel#score { font-family: '__DATA__'; font-size: 64px; font-weight: 700; color: #a7e35c; }
-QPushButton { background: #a7e35c; color: #0d2217; border: 1px solid #a7e35c; border-radius: 4px; padding: 10px 18px; min-height: 22px; font-weight: 700; font-family: '__BODY__'; }
-QPushButton:hover { background: #c2f07c; }
-QPushButton:focus, QComboBox:focus, QSlider:focus { border: 2px solid #5dd8f0; }
-QPushButton:disabled { background: #162a3a; color: #617b8c; border-color: #274054; }
-QPushButton#secondary { background: #13273a; color: #e4f2f8; border: 1px solid #2b4961; }
-QPushButton#secondary:hover { background: #1c364e; border-color: #3f6888; }
-QPushButton#secondary:disabled { color: #5d7585; border-color: #203647; }
+QPushButton { background: #a7e35c; color: #0b1e17; border: 1px solid #94d84a; border-radius: 6px; padding: 10px 20px; min-height: 24px; font-weight: 700; font-family: '__BODY__'; font-size: 13px; outline: none; }
+QPushButton:hover { background: #bbf46d; border-color: #a7ea55; color: #05140d; }
+QPushButton:pressed { background: #90d143; border-color: #7ebf32; }
+QPushButton:focus { outline: none; }
+QPushButton:disabled { background: #142536; color: #4b667a; border: 1px solid #1c354a; }
+QPushButton#secondary { background: #13273c; color: #e2eef6; border: 1px solid #274563; font-weight: 600; }
+QPushButton#secondary:hover { background: #1b3753; border-color: #3d6c96; color: #ffffff; }
+QPushButton#secondary:pressed { background: #0e1e30; border-color: #1e354e; }
+QPushButton#secondary:focus { outline: none; }
+QPushButton#secondary:disabled { background: #0d1a27; color: #3b5366; border-color: #17293a; }
+QComboBox:focus, QSlider:focus { border: 1px solid #5dd8f0; }
 QLineEdit, QComboBox { background: #0c1a2a; border: 1px solid #1e374f; border-radius: 4px; padding: 7px; min-height: 24px; color: #edf7fc; selection-background-color: #267ea2; }
 QLineEdit:focus, QComboBox:focus { border: 1px solid #5dd8f0; }
 QDoubleSpinBox { background: #0c1a2a; border: 1px solid #1e374f; border-radius: 6px; padding: 4px; min-height: 28px; color: #edf7fc; font-family: '__DATA__'; font-size: 21px; selection-background-color: #267ea2; }
@@ -446,6 +450,7 @@ class MainWindow(QMainWindow):
         self.ranking_chart.setBackgroundBrush(QColor("#12243a"))
         self.ranking_chart.setFrameShape(QFrame.Shape.NoFrame)
         self.ranking_chart.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self.ranking_chart.setStyleSheet("border: 1px solid #1a334b; border-radius: 6px; background: #12243a;")
         self.ranking_chart.setMinimumWidth(300)
         middle.addWidget(self.ranking_chart, 2)
         outer.addLayout(middle, 1)
@@ -700,30 +705,63 @@ class MainWindow(QMainWindow):
         display_value = (lambda value: math.log10(1 + value)) if logarithmic else (lambda value: value)
         chart.setTitle("PUNTAJE DE ERROR · LOG₁₀" if logarithmic else "PUNTAJE DE ERROR")
         historical, actual = QBarSet("Histórico"), QBarSet("Actual")
-        historical.setColor(QColor("#326eab"))
-        actual.setColor(QColor(GREEN))
+
+        # Degradado azul/cyan tecnológico para barras históricas
+        hist_grad = QLinearGradient(0, 1, 0, 0)
+        hist_grad.setCoordinateMode(QLinearGradient.CoordinateMode.ObjectBoundingMode)
+        hist_grad.setColorAt(0.0, QColor("#163a5e"))
+        hist_grad.setColorAt(0.7, QColor("#286ea8"))
+        hist_grad.setColorAt(1.0, QColor("#4da6f5"))
+        historical.setBrush(QBrush(hist_grad))
+        historical.setPen(QPen(Qt.PenStyle.NoPen))
+
+        # Degradado verde lima radiante para el intento actual del jugador
+        act_grad = QLinearGradient(0, 1, 0, 0)
+        act_grad.setCoordinateMode(QLinearGradient.CoordinateMode.ObjectBoundingMode)
+        act_grad.setColorAt(0.0, QColor("#2d6514"))
+        act_grad.setColorAt(0.65, QColor("#72bf25"))
+        act_grad.setColorAt(1.0, QColor("#b4f858"))
+        actual.setBrush(QBrush(act_grad))
+        actual.setPen(QPen(Qt.PenStyle.NoPen))
+
         categories = []
         for record in rows:
             categories.append(str(ordered.index(record)+1))
             is_current = record["id"] == current["id"]
             historical.append(0 if is_current else display_value(record["iae"]))
             actual.append(display_value(record["iae"]) if is_current else 0)
-        series = QBarSeries()
+
+        series = QStackedBarSeries()
+        count = len(categories)
+        bar_width = 0.22 if count == 1 else (0.34 if count == 2 else (0.42 if count == 3 else 0.52))
+        series.setBarWidth(bar_width)
         series.append(historical)
         series.append(actual)
         chart.addSeries(series)
+
         x, y = QBarCategoryAxis(), QValueAxis()
         x.append(categories)
-        x.setTitleText("Puesto / verde = actual")
-        y.setRange(0, max(1, display_value(max(values))*1.15))
+        x.setTitleText("Puesto  ·  (verde = intento actual)")
+        y.setRange(0, max(1, display_value(max(values))*1.18))
         y.setLabelFormat("%.1f")
         y.setTitleText("log₁₀(1 + IAE)" if logarithmic else "Puntaje de error")
+
+        x.setLabelsFont(QFont(FONT_DATA, 10))
+        x.setTitleFont(QFont(FONT_BODY, 9, QFont.Weight.Medium))
+        x.setGridLineVisible(False)
+        x.setLinePen(QPen(QColor("#243e54"), 1))
+
+        y.setLabelsFont(QFont(FONT_DATA, 9))
+        y.setTitleFont(QFont(FONT_BODY, 9, QFont.Weight.Medium))
+        y.setGridLinePen(QPen(QColor(36, 62, 84, 160), 1, Qt.PenStyle.DashLine))
+        y.setLinePen(QPen(QColor("#243e54"), 1))
+
         for axis, alignment in ((x, Qt.AlignmentFlag.AlignBottom), (y, Qt.AlignmentFlag.AlignLeft)):
             chart.addAxis(axis, alignment)
             axis.setLabelsColor(QColor(MUTED))
             axis.setTitleBrush(QColor(MUTED))
-            axis.setGridLineColor(QColor("#30475b"))
             series.attachAxis(axis)
+
         old = self.ranking_chart.chart()
         self.ranking_chart.setChart(chart)
         old.deleteLater()

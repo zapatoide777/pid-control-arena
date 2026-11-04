@@ -14,9 +14,9 @@ def prepare_chart(chart):
     chart.setBackgroundBrush(QColor(NAVY))
     chart.setBackgroundRoundness(0)
     chart.setTitleBrush(QColor(TEXT))
-    chart.setTitleFont(QFont(FONT_BODY, 11))
+    chart.setTitleFont(QFont(FONT_DISPLAY, 12, QFont.Weight.Bold))
     chart.legend().setVisible(False)
-    chart.setMargins(QMargins(4, 4, 4, 4))
+    chart.setMargins(QMargins(6, 6, 6, 6))
 
 
 class AttemptStrip(QWidget):
@@ -200,19 +200,18 @@ class ResponseChart(QWidget):
         self.setMinimumHeight(290)
         layout.addWidget(self.view, 1)
         key = QHBoxLayout()
-        key.setSpacing(6)
-        for color, caption in ((CYAN, "SALIDA θ(t)"), (GREEN, "REFERENCIA"),
-                               ("#79b78d", "MARGEN DE ESTABILIDAD: ±5°"),
-                               (BLUE, "ESCALÓN 45° (5 s)"),
+        key.setSpacing(8)
+        for color, caption in ((CYAN, "SALIDA θ(t)"),
+                               (GREEN, "REFERENCIA"),
                                (CORAL, "EMPUJÓN · 2 rad/s")):
             swatch = QFrame()
-            swatch.setFixedSize(16, 3)
-            swatch.setStyleSheet(f"background: {color}; border: none;")
+            swatch.setFixedSize(18, 3)
+            swatch.setStyleSheet(f"background: {color}; border-radius: 1px;")
             key.addWidget(swatch)
             text = QLabel(caption)
-            text.setStyleSheet(f"color: {MUTED}; font-size: 11px;")
+            text.setStyleSheet(f"color: {MUTED}; font-size: 11px; font-weight: 500;")
             key.addWidget(text)
-            key.addSpacing(5)
+            key.addSpacing(14)
         key.addStretch()
         layout.addLayout(key)
         self.full_extent = 60
@@ -226,7 +225,7 @@ class ResponseChart(QWidget):
         view.setFrameShape(QFrame.Shape.NoFrame)
         view.setRenderHint(QPainter.RenderHint.Antialiasing)
         x, y = QValueAxis(), QValueAxis()
-        from .simulation import DURATION, STABLE_FROM, STEP_TIME, STEP_DEGREES, W1_START, W1_END, W2_START, W2_END
+        from .simulation import DURATION, STEP_TIME, STEP_DEGREES
         x_min, x_max = -.3, DURATION
         x.setRange(x_min, x_max)
         x.setTickCount(9)
@@ -248,68 +247,32 @@ class ResponseChart(QWidget):
             axis.setGridLineColor(QColor(GRID))
             axis.setLinePen(QPen(QColor("#607d8e"), 1))
         series_list = []
-        upper, lower = QLineSeries(), QLineSeries()
-        for series, offset in ((upper, 5), (lower, -5)):
-            series.append(x_min, offset); series.append(STEP_TIME, offset)
-            series.append(STEP_TIME, STEP_DEGREES+offset); series.append(x_max, STEP_DEGREES+offset)
-        self.band_upper, self.band_lower = upper, lower
-        band = QAreaSeries(upper, lower)
-        band.setBrush(QColor(130, 205, 93, 20))
-        band.setPen(QPen(QColor("#79b78d"), .5))
-        series_list.append(band)
 
-        # Ventana 1 de evaluación: estabilización del empujón [4, 5] s
-        w1_upper, w1_lower = QLineSeries(), QLineSeries()
-        w1_upper.append(W1_START, 5); w1_upper.append(W1_END, 5)
-        w1_lower.append(W1_START, -5); w1_lower.append(W1_END, -5)
-        self.w1_upper, self.w1_lower = w1_upper, w1_lower
-        w1_band = QAreaSeries(w1_upper, w1_lower)
-        w1_band.setBrush(QColor(161, 214, 90, 26))
-        w1_band.setPen(QPen(QColor(GREEN), .6))
-        series_list.append(w1_band)
-
-        w1_mark = QLineSeries()
-        w1_mark.append(W1_START, -10000); w1_mark.append(W1_START, 10000)
-        w1_mark.setPen(QPen(QColor(GREEN), 1, Qt.PenStyle.DotLine))
-        series_list.append(w1_mark)
-
-        # Ventana 2 de evaluación: estabilización del escalón [14, 15] s
-        stable_upper, stable_lower = QLineSeries(), QLineSeries()
-        stable_upper.append(W2_START, STEP_DEGREES+5); stable_upper.append(W2_END, STEP_DEGREES+5)
-        stable_lower.append(W2_START, STEP_DEGREES-5); stable_lower.append(W2_END, STEP_DEGREES-5)
-        self.stability_upper, self.stability_lower = stable_upper, stable_lower
-        stability_band = QAreaSeries(stable_upper, stable_lower)
-        stability_band.setBrush(QColor(161, 214, 90, 26))
-        stability_band.setPen(QPen(QColor(GREEN), .6))
-        series_list.append(stability_band)
-
-        end_window = QLineSeries()
-        end_window.append(W2_START, -10000); end_window.append(W2_START, 10000)
-        end_window.setPen(QPen(QColor(GREEN), 1, Qt.PenStyle.DotLine))
-        series_list.append(end_window)
-
-        # Línea de escalón en t = 5.0 s
-        step_line = QLineSeries()
-        step_line.append(STEP_TIME, -10000); step_line.append(STEP_TIME, 10000)
-        step_line.setPen(QPen(QColor(BLUE), 1.2, Qt.PenStyle.DashLine))
-        series_list.append(step_line)
-
+        # Empujón inicial en t = 0 s
         impulse = QLineSeries()
         impulse.append(0, -10000); impulse.append(0, 10000)
         impulse.setPen(QPen(QColor(CORAL), 1.5, Qt.PenStyle.DashLine))
         series_list.append(impulse)
-        response = QLineSeries()
-        response.setPen(QPen(QColor(CYAN), 3))
+
+        # Curva de referencia / setpoint: escalón a 45° a los 5 s
         reference = QLineSeries()
         reference.append(x_min, 0); reference.append(STEP_TIME, 0)
         reference.append(STEP_TIME, STEP_DEGREES); reference.append(x_max, STEP_DEGREES)
-        reference.setPen(QPen(QColor(GREEN), 1.6, Qt.PenStyle.DashLine))
-        series_list += [response, reference]
+        reference.setPen(QPen(QColor(GREEN), 1.8, Qt.PenStyle.DashLine))
+        series_list.append(reference)
+
+        # Curva de salida del sistema θ(t)
+        response = QLineSeries()
+        response.setPen(QPen(QColor(CYAN), 2.8))
+        series_list.append(response)
+
+        # Cursor puntual en el tiempo actual
         self.cursor = QScatterSeries()
         self.cursor.setColor(QColor("#142b43"))
         self.cursor.setBorderColor(QColor(CYAN))
         self.cursor.setMarkerSize(7)
         series_list.append(self.cursor)
+
         for series in series_list:
             chart.addSeries(series)
             series.attachAxis(x); series.attachAxis(y)

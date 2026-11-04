@@ -119,29 +119,23 @@ class ArcadeButton(QPushButton):
             return
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        rect = QRectF(self.rect()).adjusted(1.5, 1.5, -1.5, -1.5)
-        # Halo interior y línea creciente: sin desplazar geometría ni texto.
+        rect = QRectF(self.rect()).adjusted(1.0, 1.0, -1.0, -1.0)
+        # Sutil capa de iluminación al pasar el ratón, sin bordes dobles ni líneas inferiores
         if self._hover > 0:
-            outline = QColor(CYAN)
-            outline.setAlpha(round(220*self._hover))
-            p.setPen(QPen(outline, 1.5))
-            fill = QColor(CYAN)
-            fill.setAlpha(round(22*self._hover))
-            p.setBrush(fill)
-            p.drawRoundedRect(rect, 3, 3)
-            accent = QColor(LIME)
-            accent.setAlpha(round(230*self._hover))
-            p.setPen(QPen(accent, 2))
-            p.drawLine(QPointF(rect.left()+3, rect.bottom()-2),
-                       QPointF(rect.left()+3+(rect.width()-6)*self._hover, rect.bottom()-2))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor(255, 255, 255, round(24 * self._hover)))
+            p.drawRoundedRect(rect, 5.0, 5.0)
+        # Atenuación suave al presionar
         if self._press > 0:
             p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QColor(3, 14, 25, round(95*self._press)))
-            p.drawRoundedRect(rect, 3, 3)
+            p.setBrush(QColor(0, 0, 0, round(35 * self._press)))
+            p.drawRoundedRect(rect, 5.0, 5.0)
+        # Indicador de foco limpio por teclado: contorno continuo sin línea punteada interior
         if focused:
-            p.setPen(QPen(QColor(CYAN), 2, Qt.PenStyle.DotLine))
+            focus_pen = QColor(CYAN)
+            p.setPen(QPen(focus_pen, 1.6, Qt.PenStyle.SolidLine))
             p.setBrush(Qt.BrushStyle.NoBrush)
-            p.drawRoundedRect(rect.adjusted(3, 3, -3, -3), 2, 2)
+            p.drawRoundedRect(rect, 5.0, 5.0)
 
 
 class ReportSweep(QWidget):
