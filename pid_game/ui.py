@@ -30,7 +30,7 @@ QFrame#card { background: transparent; border: none; }
 QFrame#instrumentPanel { background: #0c1c2e; border: 1px solid #1a334b; border-radius: 8px; }
 QFrame#dockPanel { background: #0c1c2e; border: 1px solid #1a334b; border-radius: 8px; }
 QFrame#modalCard { background: #102238; border: 1px solid #23435f; border-radius: 12px; }
-QFrame#modalInner { background: #0c1a2c; border: 1px solid #1a324a; border-radius: 8px; }
+QFrame#modalInner { background: transparent; border: none; }
 QLabel { background: transparent; }
 QLabel#brand { font-family: '__BODY__'; color: #a7e35c; font-size: 11px; font-weight: 700; letter-spacing: 0.8px; }
 QLabel#title { font-family: '__DISPLAY__'; font-size: 26px; font-weight: 700; letter-spacing: 1.5px; }
