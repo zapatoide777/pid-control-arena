@@ -56,19 +56,24 @@ def test_timestep_convergence(gains):
 def test_iae_absolute_and_full_window_stability():
     # |+1| y |-1| se suman (trapezoides), nunca se cancelan.
     samples = tuple(Sample(t, math.radians(a), 0, 0)
-                    for t, a in [(0, 1), (STABLE_FROM, -1),
+                    for t, a in [(0, 1), (4.5, -1), (STABLE_FROM, -1),
                                  (STABLE_FROM+.5, 1), (DURATION, -1)])
     iae, success, fallen = evaluate(samples)
     assert iae == pytest.approx(DURATION)
     assert success and not fallen
-    boundary = (Sample(0, 0, 1, 0), Sample(STABLE_FROM, math.radians(5), 0, 0),
+    boundary = (Sample(0, 0, 1, 0), Sample(4.5, math.radians(5), 0, 0),
+                Sample(STABLE_FROM, math.radians(5), 0, 0),
                 Sample(DURATION, 0, 0, 0))
     assert evaluate(boundary)[1]
-    spike = boundary[:2] + (Sample(STABLE_FROM+.5, math.radians(5.01), 0, 0),) + boundary[2:]
+    spike = boundary[:3] + (Sample(STABLE_FROM+.5, math.radians(5.01), 0, 0),) + boundary[3:]
     assert not evaluate(spike)[1]
     spike_w1 = (Sample(0, 0, 1, 0), Sample(4.5, math.radians(5.01), 0, 0),
                 Sample(STABLE_FROM, 0, 0, 0), Sample(DURATION, 0, 0, 0))
     assert not evaluate(spike_w1)[1]
+    missing_w1 = (Sample(0, 0, 1, 0), Sample(STABLE_FROM, math.radians(4.9), 0, 0), Sample(DURATION, 0, 0, 0))
+    assert not evaluate(missing_w1)[1]
+    missing_w2 = (Sample(0, 0, 1, 0), Sample(4.5, math.radians(4.9), 0, 0))
+    assert not evaluate(missing_w2)[1]
     both_windows = (Sample(0, 0, 1, 0), Sample(4.2, math.radians(4.9), 0, 0),
                     Sample(4.8, math.radians(-4.8), 0, 0),
                     Sample(STABLE_FROM, math.radians(5), 0, 0), Sample(DURATION, 0, 0, 0))
@@ -218,7 +223,20 @@ def test_actuator_delay_makes_high_gains_distinct_from_good_tuning():
 
 
 def test_success_uses_error_relative_to_step_reference():
+    # El péndulo cumple la ventana 1 [4, 5] s pero no sigue el escalón a 8° en la ventana 2 [14, 15] s
     samples = (Sample(0, 0, 0, 0),
+               Sample(4.5, 0, 0, 0, 0),
                Sample(STABLE_FROM, 0, 0, 0, math.radians(8)),
                Sample(DURATION, 0, 0, 0, math.radians(8)))
     assert not evaluate(samples)[1]
+
+
+def test_controller_stabilizing_w2_but_failing_w1_is_rejected():
+    # Gains(2.0, 0.2, 0.1) estabiliza tras el escalón en [14, 15] s (<1°) pero excede ±5° en [4, 5] s (~7.2°)
+    result = simulate(Gains(2.0, 0.2, 0.1))
+    w1_errs = [math.degrees(abs(s.angle - s.reference)) for s in result.samples if 4.0 <= s.time <= 5.0 - 1e-10]
+    w2_errs = [math.degrees(abs(s.angle - s.reference)) for s in result.samples if 14.0 <= s.time <= 15.0]
+    assert max(w1_errs) > 5.0
+    assert max(w2_errs) < 5.0
+    assert not result.fallen
+    assert not result.success

@@ -163,7 +163,7 @@ class ReportOverlayPage(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         if self.backdrop and not self.backdrop.isNull():
-            p.drawPixmap(0, 0, self.backdrop)
+            p.drawPixmap(self.rect(), self.backdrop)
         else:
             p.fillRect(self.rect(), QColor(BG))
         p.fillRect(self.rect(), QColor(10, 23, 40, 218))
@@ -699,8 +699,7 @@ class MainWindow(QMainWindow):
         positive = [value for value in values if value > 0]
         logarithmic = bool(positive) and max(values) > 30 * max(min(positive), .01)
         display_value = (lambda value: math.log10(1 + value)) if logarithmic else (lambda value: value)
-        chart.setTitle("PUNTAJE DE ERROR POR PUESTO / ESCALA LOGARÍTMICA" if logarithmic
-                       else "PUNTAJE DE ERROR POR PUESTO / (MENOR PUNTAJE = MEJOR CONTROL)")
+        chart.setTitle("PUNTAJE DE ERROR · LOG₁₀" if logarithmic else "PUNTAJE DE ERROR")
         historical, actual = QBarSet("Histórico"), QBarSet("Actual")
         historical.setColor(QColor("#326eab"))
         actual.setColor(QColor(GREEN))

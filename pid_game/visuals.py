@@ -226,7 +226,7 @@ class ResponseChart(QWidget):
         view.setFrameShape(QFrame.Shape.NoFrame)
         view.setRenderHint(QPainter.RenderHint.Antialiasing)
         x, y = QValueAxis(), QValueAxis()
-        from .simulation import DURATION, STABLE_FROM, STEP_TIME, STEP_DEGREES
+        from .simulation import DURATION, STABLE_FROM, STEP_TIME, STEP_DEGREES, W1_START, W1_END, W2_START, W2_END
         x_min, x_max = -.3, DURATION
         x.setRange(x_min, x_max)
         x.setTickCount(9)
@@ -260,8 +260,8 @@ class ResponseChart(QWidget):
 
         # Ventana 1 de evaluación: estabilización del empujón [4, 5] s
         w1_upper, w1_lower = QLineSeries(), QLineSeries()
-        w1_upper.append(4.0, 5); w1_upper.append(5.0, 5)
-        w1_lower.append(4.0, -5); w1_lower.append(5.0, -5)
+        w1_upper.append(W1_START, 5); w1_upper.append(W1_END, 5)
+        w1_lower.append(W1_START, -5); w1_lower.append(W1_END, -5)
         self.w1_upper, self.w1_lower = w1_upper, w1_lower
         w1_band = QAreaSeries(w1_upper, w1_lower)
         w1_band.setBrush(QColor(161, 214, 90, 26))
@@ -269,14 +269,14 @@ class ResponseChart(QWidget):
         series_list.append(w1_band)
 
         w1_mark = QLineSeries()
-        w1_mark.append(4.0, -10000); w1_mark.append(4.0, 10000)
+        w1_mark.append(W1_START, -10000); w1_mark.append(W1_START, 10000)
         w1_mark.setPen(QPen(QColor(GREEN), 1, Qt.PenStyle.DotLine))
         series_list.append(w1_mark)
 
         # Ventana 2 de evaluación: estabilización del escalón [14, 15] s
         stable_upper, stable_lower = QLineSeries(), QLineSeries()
-        stable_upper.append(STABLE_FROM, STEP_DEGREES+5); stable_upper.append(x_max, STEP_DEGREES+5)
-        stable_lower.append(STABLE_FROM, STEP_DEGREES-5); stable_lower.append(x_max, STEP_DEGREES-5)
+        stable_upper.append(W2_START, STEP_DEGREES+5); stable_upper.append(W2_END, STEP_DEGREES+5)
+        stable_lower.append(W2_START, STEP_DEGREES-5); stable_lower.append(W2_END, STEP_DEGREES-5)
         self.stability_upper, self.stability_lower = stable_upper, stable_lower
         stability_band = QAreaSeries(stable_upper, stable_lower)
         stability_band.setBrush(QColor(161, 214, 90, 26))
@@ -284,7 +284,7 @@ class ResponseChart(QWidget):
         series_list.append(stability_band)
 
         end_window = QLineSeries()
-        end_window.append(STABLE_FROM, -10000); end_window.append(STABLE_FROM, 10000)
+        end_window.append(W2_START, -10000); end_window.append(W2_START, 10000)
         end_window.setPen(QPen(QColor(GREEN), 1, Qt.PenStyle.DotLine))
         series_list.append(end_window)
 

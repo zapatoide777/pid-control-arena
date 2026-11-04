@@ -13,6 +13,13 @@ STABLE_FROM = DURATION - STABILITY_WINDOW
 STEP_TIME = 5.0
 STEP_DEGREES = 8.0
 
+# Ventana 1: estabilización tras perturbación inicial [4, 5] s
+W1_START = STEP_TIME - STABILITY_WINDOW
+W1_END = STEP_TIME
+# Ventana 2: estabilización tras escalón de referencia [14, 15] s
+W2_START = DURATION - STABILITY_WINDOW
+W2_END = DURATION
+
 def reference_at(time: float) -> float:
     return math.radians(STEP_DEGREES) if time >= STEP_TIME else 0.0
 
@@ -54,9 +61,9 @@ def evaluate(samples: tuple[Sample, ...]) -> tuple[float, bool, bool]:
     iae = sum(iae_segment(a, b) for a, b in zip(samples, samples[1:]))
     fallen = any(abs(s.angle) >= math.pi / 2 for s in samples)
     # Doble ventana de estabilidad: [4, 5] s para el empujón inicial y [14, 15] s para el escalón
-    w1 = [s for s in samples if 4.0 - 1e-10 <= s.time <= 5.0 - 1e-10]
-    w2 = [s for s in samples if 14.0 - 1e-10 <= s.time <= 15.0 + 1e-10]
-    stable_w1 = (not w1) or all(abs(math.degrees(s.angle-s.reference)) <= BAND for s in w1)
+    w1 = [s for s in samples if W1_START - 1e-10 <= s.time <= W1_END - 1e-10]
+    w2 = [s for s in samples if W2_START - 1e-10 <= s.time <= W2_END + 1e-10]
+    stable_w1 = bool(w1) and all(abs(math.degrees(s.angle-s.reference)) <= BAND for s in w1)
     stable_w2 = bool(w2) and all(abs(math.degrees(s.angle-s.reference)) <= BAND for s in w2)
     stable = stable_w1 and stable_w2
     return iae, stable and not fallen, fallen
