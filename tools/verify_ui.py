@@ -21,7 +21,7 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     data = output / "qa-ranking.json"
     # Solo fixtures de QA en artifacts; nunca data/ranking.json.
-    data.write_text(json.dumps({"schema": 1, "challenge": CHALLENGE, "records": []}), encoding="utf-8")
+    data.write_text(json.dumps({"schema": 2, "challenge": CHALLENGE, "records": []}), encoding="utf-8")
     app = QApplication([])
     configure_app(app)
     window = MainWindow(data)

@@ -113,7 +113,7 @@ def test_current_outside_top_ten_table_and_chart(qapp, tmp_path):
     template = ranking.add_game(completed_game("Base"))
     records = [dict(template, id=f"historic-{i}", alias=f"Jugador {i}", iae=float(i+1))
                for i in range(12)]
-    path.write_text(json.dumps({"schema": 1, "challenge": CHALLENGE, "records": records}), encoding="utf-8")
+    path.write_text(json.dumps({"schema": 2, "challenge": CHALLENGE, "records": records}), encoding="utf-8")
     window = MainWindow(path)
     window.game = completed_game("Actual")
     window.show_results()
@@ -332,7 +332,11 @@ def test_default_playback_rates(qapp, tmp_path):
     window.close()
 
 
-def test_maximized_report_and_hint_do_not_overlap(qapp, tmp_path):
+def test_maximized_report_and_hint_do_not_overlap(qapp, tmp_path, monkeypatch):
+    # This test exercises animation frames; make it independent of the OS
+    # reduced-motion setting, which is covered by the dedicated motion tests.
+    from pid_game import visuals
+    monkeypatch.setattr(visuals, "reduced_motion", lambda: False)
     window = MainWindow(tmp_path / "ranking.json")
     window.showMaximized()
     QTest.qWait(80)

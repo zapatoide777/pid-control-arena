@@ -3,6 +3,7 @@ import math
 from .controller import Gains, PID
 from .physics import Plant
 from .actuator import DCMotor
+from .textos import text
 
 """Desafío de 15 s; la reproducción visual no altera el horizonte físico."""
 DURATION = 15.0
@@ -35,6 +36,57 @@ class Sample:
     reference: float = 0.0  # rad; valor posterior al salto si time == STEP_TIME
     current: float = 0.0  # A
     voltage: float = 0.0  # V
+    pid_torque_raw: float = 0.0  # N·m antes del límite del PID
+    pid_torque: float = 0.0  # N·m después del límite del PID
+    pid_saturated: bool = False
+    current_saturated: bool = False
+    integral: float = 0.0  # contribución integral en N·m
+
+
+@dataclass(frozen=True)
+class ResponseMetrics:
+    post_step_crossings: int
+    overshoot_degrees: float
+    settling_time: float | None  # segundos desde STEP_TIME; None si no asienta
+
+
+def response_metrics(samples: tuple[Sample, ...], step_time: float = STEP_TIME,
+                     band: float = BAND, hysteresis_degrees: float = 1.0) -> ResponseMetrics:
+    """Calcula métricas de respuesta al escalón desde muestras cronológicas.
+
+    Los cruces comparan ángulo menos referencia, ignorando la zona muerta de
+    ±hysteresis_degrees. El asentamiento exige permanecer dentro de ±band hasta
+    la última muestra disponible.
+    """
+    tail = [sample for sample in samples if sample.time >= step_time]
+    if not tail:
+        return ResponseMetrics(0, 0.0, None)
+
+    errors = [math.degrees(sample.angle - sample.reference) for sample in tail]
+    crossings = 0
+    side = 0
+    for error in errors:
+        if error >= hysteresis_degrees:
+            new_side = 1
+        elif error <= -hysteresis_degrees:
+            new_side = -1
+        else:
+            continue
+        if side and side != new_side:
+            crossings += 1
+        side = new_side
+
+    overshoot = max(0.0, max(errors))
+    settling_sample = None
+    suffix_stays_in_band = True
+    for sample, error in zip(reversed(tail), reversed(errors)):
+        if abs(error) <= band + 1e-9 and suffix_stays_in_band:
+            settling_sample = sample
+        else:
+            suffix_stays_in_band = False
+    settling_time = (settling_sample.time - step_time
+                    if settling_sample is not None else None)
+    return ResponseMetrics(crossings, overshoot, settling_time)
 
 
 @dataclass(frozen=True)
@@ -43,8 +95,19 @@ class Result:
     samples: tuple[Sample, ...]
     iae: float  # grados segundo
     success: bool
-    fallen: bool
     saturation_fraction: float
+    current_saturation_fraction: float = 0.0
+    max_current: float = 0.0
+    min_integral: float = 0.0
+    max_integral: float = 0.0
+    post_step_crossings: int = 0
+    overshoot_degrees: float = 0.0
+    settling_time: float | None = None
+
+    @property
+    def pid_saturation_fraction(self) -> float:
+        """Fracción de muestras saturadas por el PID (alias explícito)."""
+        return self.saturation_fraction
 
     @property
     def peak_degrees(self) -> float:
@@ -57,16 +120,15 @@ def iae_segment(a: Sample, b: Sample) -> float:
             abs(math.degrees(b.angle-a.reference))) / 2)
 
 
-def evaluate(samples: tuple[Sample, ...]) -> tuple[float, bool, bool]:
+def evaluate(samples: tuple[Sample, ...]) -> tuple[float, bool]:
     iae = sum(iae_segment(a, b) for a, b in zip(samples, samples[1:]))
-    fallen = any(abs(s.angle) >= math.pi / 2 for s in samples)
     # Doble ventana de estabilidad: [4, 5] s para el empujón inicial y [14, 15] s para el escalón
     w1 = [s for s in samples if W1_START - 1e-10 <= s.time <= W1_END - 1e-10]
     w2 = [s for s in samples if W2_START - 1e-10 <= s.time <= W2_END + 1e-10]
     stable_w1 = bool(w1) and all(abs(math.degrees(s.angle-s.reference)) <= BAND for s in w1)
     stable_w2 = bool(w2) and all(abs(math.degrees(s.angle-s.reference)) <= BAND for s in w2)
     stable = stable_w1 and stable_w2
-    return iae, stable and not fallen, fallen
+    return iae, stable
 
 
 def simulate(gains: Gains, dt: float = DT, plant: Plant | None = None) -> Result:
@@ -78,16 +140,30 @@ def simulate(gains: Gains, dt: float = DT, plant: Plant | None = None) -> Result
     angle, velocity, current = 0.0, INITIAL_VELOCITY, 0.0
     samples = [Sample(0.0, angle, velocity, 0.0)]
     saturated_steps = 0
+    current_saturated_steps = 0
     steps = round(DURATION / dt)
     for i in range(steps):
         torque = pid.command(angle, velocity, dt, reference_at(i*dt))
         saturated_steps += int(pid.saturated)
         voltage = actuator.voltage(torque)
         angle, velocity, current = actuator.step(plant, angle, velocity, current, voltage, dt)
-        samples.append(Sample((i+1)*dt, angle, velocity, actuator.torque_constant*current, reference_at((i+1)*dt), current, voltage))
+        current_saturated = abs(current) >= actuator.current_limit - 1e-9
+        current_saturated_steps += int(current_saturated)
+        samples.append(Sample(
+            (i+1)*dt, angle, velocity, actuator.torque_constant*current,
+            reference_at((i+1)*dt), current, voltage,
+            pid.raw_output, torque, pid.saturated, current_saturated, pid.integral))
     values = tuple(samples)
-    iae, success, fallen = evaluate(values)
-    return Result(gains, values, iae, success, fallen, saturated_steps / steps)
+    iae, success = evaluate(values)
+    response = response_metrics(values)
+    return Result(
+        gains, values, iae, success, saturated_steps / steps,
+        current_saturated_steps / steps,
+        max(abs(sample.current) for sample in values),
+        min(sample.integral for sample in values),
+        max(sample.integral for sample in values),
+        response.post_step_crossings, response.overshoot_degrees,
+        response.settling_time)
 
 
 def hint(result: Result) -> str:
@@ -95,12 +171,10 @@ def hint(result: Result) -> str:
         return ""
     tail = [math.degrees(s.angle-s.reference) for s in result.samples if s.time >= 1.0]
     crossings = sum(a*b < 0 for a, b in zip(tail, tail[1:]))
-    if result.fallen:
-        return "El péndulo cayó: sube Kp poco a poco y ajusta Kd."
     if crossings >= 2:
-        return "Oscila mucho: sube Kd poco a poco o baja Kp o Ki."
+        return text("hints.oscillating")
     if result.saturation_fraction > 0.05:
-        return "El torque llegó al límite: baja las ganancias más altas."
+        return text("hints.saturation")
     if abs(tail[-1]) > max(5, abs(tail[0])*1.5):
-        return "El error aumenta: sube Kp poco a poco y ajusta Kd."
-    return "No se estabilizó: ajusta Kp y Kd, y cambia Ki con cuidado."
+        return text("hints.growing_error")
+    return text("hints.unstable")

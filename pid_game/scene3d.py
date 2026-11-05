@@ -98,7 +98,7 @@ def render_pendulum(widget, painter, radius):
         for ids in ((0,1,2,3),(4,5,6,7),(0,4,7,3),(1,5,6,2),(3,2,6,7),(0,1,5,4)):
             face(tuple(vertices[i] for i in ids),color)
     rod(.08,2.45,.095,.84,1.04,'#9cb8c1')
-    rod(2.13,2.50,.22,.78,1.12,CORAL if widget.fallen else LIME)
+    rod(2.13,2.50,.22,.78,1.12,LIME)
     # La abrazadera gira con la varilla, sobre la punta del eje.
     layer = 3
     cylinder(0,0,.85,1.12,.31,'#355b6b')

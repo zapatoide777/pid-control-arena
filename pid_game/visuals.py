@@ -101,7 +101,6 @@ class PendulumView(QWidget):
         super().__init__()
         self.angle = 0.0
         self.reference_angle = 0.0
-        self.fallen = False
         self.sample_time = -1.0
         self.trail = []
         self.length_scale = length_scale

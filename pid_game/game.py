@@ -77,7 +77,8 @@ class Game:
     def final(self) -> Result:
         if self.state is not State.FINISHED:
             raise RuntimeError("La partida no ha terminado.")
-        return self.attempts[2]
+        # min conserva la primera posición cuando hay empate de IAE.
+        return min(self.attempts, key=lambda result: result.iae)
 
     def reset(self):
         if self.state is State.PLAYING:

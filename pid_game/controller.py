@@ -31,6 +31,8 @@ class PID:
         self.integral = 0.0  # contribución integral en N·m
         self.filtered_velocity = 0.0
         self.saturated = False
+        self.raw_output = 0.0
+        self.output = 0.0
 
     def command(self, angle: float, velocity: float, dt: float, reference: float = 0.0) -> float:
         self.filtered_velocity += (1 - math.exp(-dt / self.filter_time)) * (
@@ -45,4 +47,6 @@ class PID:
             self.integral += increment
         raw = base + self.integral
         self.saturated = abs(raw) > self.limit
-        return max(-self.limit, min(self.limit, raw))
+        self.raw_output = raw
+        self.output = max(-self.limit, min(self.limit, raw))
+        return self.output

@@ -21,7 +21,8 @@ from . import motion
 from .theme import (BG, PLOT, SURFACE, SURFACE_RAISED, LINE, GRID, TEXT, MUTED as THEME_MUTED,
                     CYAN, BLUE, LIME, FONT_BODY, FONT_DISPLAY, FONT_DATA, FONT_FILES)
 from .visuals import PendulumView, ResponseChart, AttemptStrip, AnalysisTrace, GainReadout, prepare_chart, GREEN, MUTED
-from .guide_view import EducationalGuidePage
+from .guide_view import EducationalGuidePage, TOPICS
+from .textos import text
 
 PRE_ROLL = .65  # preparación visual, fuera del IAE
 STYLE = """
@@ -130,7 +131,7 @@ class GainControl(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 0, 8, 0)
         row = QHBoxLayout()
-        row.addWidget(label(f"{name}  ·  {meaning}", "brand"))
+        row.addWidget(label(text("game.gain_caption", nombre=name, significado=meaning), "brand"))
         row.addStretch()
         self.spin = QDoubleSpinBox()
         self.spin.setRange(0, maximum)
@@ -140,14 +141,14 @@ class GainControl(QWidget):
         self.spin.setFixedSize(140, 52)
         self.spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self.spin.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.spin.setAccessibleName(f"{name}, {meaning}")
-        self.spin.setAccessibleDescription(f"Valor entre 0 y {maximum}; unidad {unit}")
+        self.spin.setAccessibleName(text("game.gain_accessible_name", nombre=name, significado=meaning))
+        self.spin.setAccessibleDescription(text("game.gain_accessible_description", maximo=maximum, unidad=unit))
         row.addWidget(self.spin)
         layout.addLayout(row)
         self.slider = QSlider(Qt.Orientation.Horizontal)
         self.slider.setRange(0, maximum*100)
         self.slider.setMinimumHeight(25)
-        self.slider.setAccessibleName(f"Ajustar {name}, {meaning}")
+        self.slider.setAccessibleName(text("game.gain_slider_accessible_name", nombre=name, significado=meaning))
         self.slider.valueChanged.connect(lambda v: self.spin.setValue(v/100))
         self.spin.valueChanged.connect(lambda v: self.slider.setValue(round(v*100)))
         self.spin.setValue(value)
@@ -177,7 +178,7 @@ class ReportOverlayPage(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self, data_path=None):
         super().__init__()
-        self.setWindowTitle("PID / Control Arena")
+        self.setWindowTitle(text("menu.brand"))
         self.resize(1400, 940)
         self.setMinimumSize(1120, 800)
         self.game = Game()
@@ -191,6 +192,10 @@ class MainWindow(QMainWindow):
         self.report_ready_at = 0.0
         self.cumulative_iae = []
         self.current_ranking_row = None
+        self._guide_preload_started = False
+        self._guide_preload_scheduled = False
+        self._guide_preload_connected = False
+        self._closing = False
         root = QWidget()
         root.setObjectName("root")
         self.setCentralWidget(root)
@@ -199,7 +204,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(8)
         header = QHBoxLayout()
         titles = QVBoxLayout()
-        titles.addWidget(label("PID  /  EQUILIBRIO", "title"))
+        titles.addWidget(label(text("menu.brand"), "title"))
         header.addLayout(titles)
         header.addStretch()
         layout.addLayout(header)
@@ -223,16 +228,16 @@ class MainWindow(QMainWindow):
         row = QHBoxLayout()
         copy = QVBoxLayout()
         copy.addStretch()
-        copy.addWidget(label("Controla el\npéndulo", "hero"))
-        copy.addWidget(label("Ajusta Kp, Ki y Kd para seguir la referencia.", "muted", True))
+        copy.addWidget(label(text("menu.title"), "hero"))
+        copy.addWidget(label(text("menu.subtitle"), "muted", True))
         copy.addSpacing(18)
         self.alias_edit = QLineEdit()
-        self.alias_edit.setPlaceholderText("Tu nombre")
-        self.alias_edit.setAccessibleName("Nombre o alias del jugador")
+        self.alias_edit.setPlaceholderText(text("menu.alias_placeholder"))
+        self.alias_edit.setAccessibleName(text("menu.alias_accessible_name"))
         self.alias_edit.setMaxLength(32)
         self.alias_edit.setMaximumWidth(440)
         copy.addWidget(self.alias_edit)
-        self.start_button = button("Jugar  →", self.start_game)
+        self.start_button = button(text("menu.play"), self.start_game)
         self.start_button.setMaximumWidth(440)
         copy.addWidget(self.start_button)
         guide_row_container = QWidget()
@@ -240,13 +245,13 @@ class MainWindow(QMainWindow):
         guide_row_layout = QHBoxLayout(guide_row_container)
         guide_row_layout.setContentsMargins(0, 4, 0, 0)
         guide_row_layout.setSpacing(10)
-        self.iae_button = button("¿Qué es el IAE?", lambda: self.open_guide("iae"), secondary=True)
-        self.pid_guide_button = button("¿Qué hacen Kp, Ki y Kd?", lambda: self.open_guide("kp"), secondary=True)
+        self.iae_button = button(text("menu.guide_iae"), lambda: self.open_guide("iae"), secondary=True)
+        self.pid_guide_button = button(text("menu.guide_pid"), lambda: self.open_guide("kp"), secondary=True)
         guide_row_layout.addWidget(self.iae_button)
         guide_row_layout.addWidget(self.pid_guide_button)
         copy.addWidget(guide_row_container)
         copy.addSpacing(6)
-        copy.addWidget(label("Solo el tercer intento entra al ranking.", "muted", True))
+        copy.addWidget(label(text("menu.ranking_rule"), "muted", True))
         copy.addStretch()
         row.addLayout(copy, 5)
         scene = PendulumView()
@@ -265,7 +270,7 @@ class MainWindow(QMainWindow):
         outer.setSpacing(10)
         top = QHBoxLayout()
         headings = QVBoxLayout()
-        self.attempt_label = label("DEMOSTRACIÓN", "heading")
+        self.attempt_label = label(text("game.demo"), "heading")
         self.phase_label = label("", "muted")
         headings.addWidget(self.attempt_label)
         headings.addWidget(self.phase_label)
@@ -288,8 +293,8 @@ class MainWindow(QMainWindow):
         self.angle_label = label("0.0°", "telemetry")
         self.time_label = label("0.00 s", "telemetry")
         self.error_label = label("0.00 pts", "telemetrySmall")
-        self.angle_caption = label("Ángulo", "muted")
-        self.time_caption = label(f"Tiempo / {DURATION:g} s", "muted")
+        self.angle_caption = label(text("game.angle"), "muted")
+        self.time_caption = label(text("game.time", duracion=DURATION), "muted")
         for caption, metric in ((self.angle_caption, self.angle_label),
                                 (self.time_caption, self.time_label)):
             col = QVBoxLayout()
@@ -298,11 +303,11 @@ class MainWindow(QMainWindow):
             telemetry.addLayout(col, 1)
         content.addLayout(telemetry)
         iae_row = QHBoxLayout()
-        iae_row.addWidget(label("PUNTAJE (IAE)", "muted"))
+        iae_row.addWidget(label(text("game.score"), "muted"))
         iae_row.addWidget(self.error_label)
         iae_row.addStretch()
         content.addLayout(iae_row)
-        self.fall_label = label("PREPARANDO EMPUJÓN", "muted", True)
+        self.fall_label = label(text("game.preparing_push"), "muted", True)
         content.addWidget(self.fall_label)
         workspace.addWidget(instrument, 3)
         outer.addLayout(workspace, 1)
@@ -325,15 +330,15 @@ class MainWindow(QMainWindow):
         self.edit_note = label("", "muted", True)
         actions.addWidget(self.edit_note, 1)
         self.speed_combo = QComboBox()
-        for caption, rate in (("1× · tiempo real", 1.0), ("0,5× · cámara lenta", .5)):
+        for caption, rate in ((text("game.speed_realtime"), 1.0), (text("game.speed_slow_motion"), .5)):
             self.speed_combo.addItem(caption, rate)
-        self.speed_combo.setAccessibleName("Velocidad de reproducción")
+        self.speed_combo.setAccessibleName(text("game.speed_accessible_name"))
         actions.addWidget(self.speed_combo)
-        self.pause_button = button("Pausar", self.toggle_pause, True)
+        self.pause_button = button(text("game.pause"), self.toggle_pause, True)
         actions.addWidget(self.pause_button)
-        self.skip_button = button("Omitir demo", self.skip_demo, True)
+        self.skip_button = button(text("game.skip_demo"), self.skip_demo, True)
         actions.addWidget(self.skip_button)
-        self.run_button = button("Ejecutar intento 1  →", self.run_trial)
+        self.run_button = button(text("game.run", numero=1), self.run_trial)
         actions.addWidget(self.run_button)
         outer.addLayout(actions)
         self.stack.addWidget(page)
@@ -352,7 +357,7 @@ class MainWindow(QMainWindow):
         modal_layout.setSpacing(14)
         outer.addWidget(self.modal_card)
 
-        self.report_title = label("ANÁLISIS DEL INTENTO", "heading")
+        self.report_title = label(text("report.title"), "heading")
         modal_layout.addWidget(self.report_title)
         self.report_strip = AttemptStrip()
         modal_layout.addWidget(self.report_strip)
@@ -367,10 +372,10 @@ class MainWindow(QMainWindow):
         score_layout = QVBoxLayout(score)
         score_layout.setContentsMargins(18, 14, 18, 14)
         score_layout.setSpacing(6)
-        score_layout.addWidget(label("PUNTAJE DE ERROR  /  IAE", "brand"))
+        score_layout.addWidget(label(text("report.score_title"), "brand"))
         self.report_iae = label("", "score")
         score_layout.addWidget(self.report_iae)
-        score_layout.addWidget(label("Puntaje de error  ·  (Menor puntaje = mejor control)", "muted"))
+        score_layout.addWidget(label(text("report.score_hint"), "muted"))
         self.report_delta = label("", "heading", True)
         score_layout.addWidget(self.report_delta)
         self.report_status = label("", "muted", True)
@@ -385,7 +390,7 @@ class MainWindow(QMainWindow):
         guide_layout.setContentsMargins(18, 14, 18, 14)
         guide_layout.setSpacing(8)
         guide_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self.guide_title = label("TU SIGUIENTE MOVIMIENTO", "brand")
+        self.guide_title = label(text("report.recommendation"), "brand")
         guide_layout.addWidget(self.guide_title)
         self.feedback_label = label("", wrap=True)
         self.feedback_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
@@ -429,7 +434,7 @@ class MainWindow(QMainWindow):
         actions = QHBoxLayout()
         self.analysis_label = label("", "muted")
         actions.addWidget(self.analysis_label, 1)
-        self.continue_button = button("CONTINUAR  →", self.continue_trial)
+        self.continue_button = button(text("report.continue"), self.continue_trial)
         actions.addWidget(self.continue_button)
         modal_layout.addLayout(actions)
 
@@ -448,9 +453,9 @@ class MainWindow(QMainWindow):
         outer.addWidget(summary)
         middle = QHBoxLayout()
         rank_frame, content = card()
-        content.addWidget(label("CLASIFICACIÓN / TOP 10", "heading"))
+        content.addWidget(label(text("ranking.title"), "heading"))
         self.table = QTableWidget(0, 6)
-        self.table.setHorizontalHeaderLabels(["#", "Piloto", "Puntaje (IAE)", "Kp / Ki / Kd", "Estado", "Fecha"])
+        self.table.setHorizontalHeaderLabels([text(f"ranking.headers.{key}") for key in ("position", "player", "score", "gains", "status", "date")])
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setAlternatingRowColors(True)
@@ -471,13 +476,14 @@ class MainWindow(QMainWindow):
         outer.addWidget(self.save_warning)
         actions = QHBoxLayout()
         actions.addStretch()
-        self.new_button = button("Nueva partida", self.new_game)
+        self.new_button = button(text("ranking.new_game"), self.new_game)
         actions.addWidget(self.new_button)
-        actions.addWidget(button("SALIR", self.close, True))
+        actions.addWidget(button(text("ranking.exit"), self.close, True))
         outer.addLayout(actions)
         self.stack.addWidget(page)
 
     def start_game(self):
+        self._pause_guide_preload()
         self.game.begin(self.alias_edit.text())
         self.stack.setCurrentIndex(1)
         for control, value in zip(self.gain_controls, (DEMO_GAINS.kp, DEMO_GAINS.ki, DEMO_GAINS.kd)):
@@ -485,9 +491,9 @@ class MainWindow(QMainWindow):
         self.attempt_strip.results, self.attempt_strip.active = [], -1
         self.attempt_strip.playing = True
         self.attempt_strip.update()
-        self.attempt_label.setText("Demostración")
-        self.phase_label.setText("PID inicial · sin gastar intentos")
-        self.edit_note.setText("Observa la respuesta al impulso.")
+        self.attempt_label.setText(text("game.demo"))
+        self.phase_label.setText(text("game.demo_phase"))
+        self.edit_note.setText(text("game.demo_note"))
         self._set_editing(False)
         self.skip_button.setVisible(self.game.demo_seen)
         self._start_playback(simulate(DEMO_GAINS))
@@ -503,7 +509,7 @@ class MainWindow(QMainWindow):
         self.playback_rate = self.speed_combo.currentData()
         self.paused_at, self.pause_total_ms = None, 0
         self.pause_button.setEnabled(True)
-        self.pause_button.setText("Pausar")
+        self.pause_button.setText(text("game.pause"))
         self.cumulative_iae = [0.0]
         for a, b in zip(result.samples, result.samples[1:]):
             self.cumulative_iae.append(self.cumulative_iae[-1] +
@@ -518,24 +524,24 @@ class MainWindow(QMainWindow):
             return
         if self.paused_at is None:
             self.paused_at = self.playback_clock.elapsed()
-            self.pause_button.setText("Reanudar")
+            self.pause_button.setText(text("game.resume"))
         else:
             self.pause_total_ms += self.playback_clock.elapsed()-self.paused_at
             self.paused_at = None
-            self.pause_button.setText("Pausar")
+            self.pause_button.setText(text("game.pause"))
 
     def skip_demo(self):
         self.game.complete_demo(skipped=True)
         self.playback_active = False
         self.attempt_strip.playing = False
-        self._show_editing("Elige tus ganancias.")
+        self._show_editing(text("game.edit_first"))
 
     def _show_editing(self, message):
         self.stack.setCurrentIndex(1)
         number = len(self.game.attempts)+1
-        self.attempt_label.setText("Ajusta el controlador")
-        self.phase_label.setText(f"Intento {number} de 3")
-        self.run_button.setText(f"Ejecutar intento {number}  →")
+        self.attempt_label.setText(text("game.adjust"))
+        self.phase_label.setText(text("game.attempt", numero=number))
+        self.run_button.setText(text("game.run", numero=number))
         self._set_editing(True)
         self.pause_button.setEnabled(False)
         self.skip_button.hide()
@@ -552,9 +558,9 @@ class MainWindow(QMainWindow):
         self._set_editing(False)
         self.attempt_strip.playing = True
         self.attempt_strip.update()
-        self.attempt_label.setText("EN MARCHA")
-        self.phase_label.setText(f"{DURATION:g} s físicos · reproducción a {self.speed_combo.currentData():g}×")
-        self.edit_note.setText(f"Referencia: 0° → {STEP_DEGREES:g}° a los {STEP_TIME:g} s  ·  Margen de estabilidad: ±5°")
+        self.attempt_label.setText(text("game.running"))
+        self.phase_label.setText(text("game.playback", duracion=DURATION, velocidad=self.speed_combo.currentData()))
+        self.edit_note.setText(text("game.reference", grados=STEP_DEGREES, tiempo=STEP_TIME))
         self._start_playback(result)
 
     def _render_sample(self, index, preparing=False):
@@ -564,7 +570,6 @@ class MainWindow(QMainWindow):
         sample = result.samples[index]
         self.pendulum.angle = sample.angle
         self.pendulum.reference_angle = sample.reference
-        self.pendulum.fallen = any(abs(s.angle) >= math.pi/2 for s in result.samples[:index+1])
         self.pendulum.sample_time = -1 if preparing else sample.time
         self.pendulum.trail = [s.angle for s in result.samples[max(0, index-250):index+1:12]]
         self.pendulum.update()
@@ -573,10 +578,8 @@ class MainWindow(QMainWindow):
         self.error_label.setText(f"{self.cumulative_iae[index]:.2f} pts")
         for metric in (self.angle_label, self.time_label, self.error_label):
             metric.setMinimumWidth(metric.fontMetrics().horizontalAdvance(metric.text()) + 2)
-        self.fall_label.setText("Preparando…" if preparing else
-            ("Caída registrada" if self.pendulum.fallen else
-             ("Empujón inicial · 2 rad/s" if sample.time < .2 else
-              "Margen de estabilidad: ±5°")))
+        self.fall_label.setText(text("game.preparing") if preparing else
+            (text("game.push") if sample.time < .2 else text("game.stability")))
         self.progress.setValue(round(sample.time*1000))
         self.response_chart.reveal(result, index)
 
@@ -591,9 +594,9 @@ class MainWindow(QMainWindow):
             remaining = max(0, self.report_ready_at-time.monotonic())
             self.continue_button.setEnabled(remaining <= 0)
             self.analysis_progress.setValue(round(3000-min(3, remaining)*1000))
-            self.analysis_label.setText(f"Preparando  ·  {math.ceil(remaining)} s" if remaining else
-                                        "Listo para continuar")
-            self.continue_button.setText("Ver ranking  →" if self.game.state is State.FINISHED else "Siguiente intento  →")
+            self.analysis_label.setText(text("game.analysis_wait", segundos=math.ceil(remaining)) if remaining else
+                                        text("game.analysis_ready"))
+            self.continue_button.setText(text("game.ranking") if self.game.state is State.FINISHED else text("game.next"))
 
     def _complete_playback(self):
         self.playback_active = False
@@ -602,7 +605,7 @@ class MainWindow(QMainWindow):
         self.pause_button.setEnabled(False)
         if self.game.phase is Phase.DEMO:
             self.game.complete_demo()
-            self._show_editing("Tu turno: ajusta Kp, Ki y Kd.")
+            self._show_editing(text("game.your_turn"))
             return
         self.game.finish_playback(time.monotonic())
         if self.game.state is State.FINISHED:
@@ -618,7 +621,7 @@ class MainWindow(QMainWindow):
     def show_report(self):
         result = self.game.attempts[-1]
         number = len(self.game.attempts)
-        self.report_title.setText(f"INTENTO {number:02d}  /  {'ESTABLE' if result.success else 'SIN EQUILIBRIO'}")
+        self.report_title.setText(text("report.attempt_title", numero=number, estado=text("report.attempt_stable") if result.success else text("report.attempt_unstable")))
         self.report_iae.setText(f"{result.iae:.2f}")
         self.report_trace.result = result
         self.report_trace.update()
@@ -632,18 +635,16 @@ class MainWindow(QMainWindow):
         else:
             delta = None
         if delta is None:
-            comparison = "Primer registro"
+            comparison = text("report.first")
         elif abs(delta) < .005:
-            comparison = "Puntaje igual al intento anterior"
+            comparison = text("report.same")
         else:
-            comparison = f"{abs(delta):.2f} pts {'menos' if delta > 0 else 'más'} que el intento anterior"
+            comparison = text("report.delta", cantidad=abs(delta), direccion="menos" if delta > 0 else "más")
         self.report_delta.setText(comparison)
-        self.report_status.setText("Error dentro del margen de estabilidad: ±5° en ambas ventanas." if result.success else
-            (f"Caída registrada a ±90° · análisis completo de {DURATION:g} s." if result.fallen else
-             "Fuera del margen de estabilidad: ±5°."))
-        self.guide_title.setText("LECTURA" if result.success else "PISTA")
-        self.feedback_label.setText(("Buen control: error dentro del margen de estabilidad: ±5°."
-            if number < 3 else "Estable. Este intento entra al ranking.")
+        self.report_status.setText(text("report.stable") if result.success else text("report.outside"))
+        self.guide_title.setText(text("report.reading") if result.success else text("report.hint"))
+        self.feedback_label.setText((text("report.success_feedback")
+            if number < 3 else text("report.final_attempt"))
             if result.success else hint(result))
         self.report_ready_at = max(time.monotonic()+3, self.game.ready_at)
         self.continue_button.setEnabled(False)
@@ -667,28 +668,28 @@ class MainWindow(QMainWindow):
             self.show_results()
         else:
             self.game.continue_editing(time.monotonic())
-            self._show_editing("Ajusta y vuelve a probar.")
+            self._show_editing(text("game.edit_again"))
 
     def show_results(self):
         current = self.ranking.add_game(self.game)
         ordered = self.ranking.ordered()
         rank = next(i+1 for i, r in enumerate(ordered) if r["id"] == current["id"])
         result = self.game.final
-        self.final_title.setText(f"CLASIFICACIÓN / {self.game.alias}")
-        self.final_metric.setText(f"{result.iae:.2f} pts   ·   puesto {rank} de {len(ordered)}")
-        state = "Estabilización lograda" if result.success else ("Caída registrada" if result.fallen else "Fuera del criterio de estabilidad")
-        self.final_detail.setText(f"Tercer intento · {state} · (Menor puntaje = mejor control)")
+        self.final_title.setText(text("ranking.player_title", alias=self.game.alias))
+        self.final_metric.setText(text("ranking.result", iae=result.iae, puesto=rank, total=len(ordered)))
+        state = text("ranking.status_stable") if result.success else text("ranking.status_unstable")
+        self.final_detail.setText(text("report.best_attempt", numero=self.game.attempts.index(result)+1, estado=state))
         self.save_warning.setText(self.ranking.warning)
         rows = ordered[:10] + ([current] if rank > 10 else [])
         self.table.setRowCount(len(rows))
         for row, record in enumerate(rows):
             actual = record["id"] == current["id"]
             gains = record["gains"]
-            status = "Estable" if record["success"] else ("Caída" if record["fallen"] else "No estable")
-            values = [str(ordered.index(record)+1), ("(actual) " if actual else "") + record["alias"],
+            status = text("ranking.status_stable") if record["success"] else text("ranking.status_unstable")
+            values = [str(ordered.index(record)+1), (text("ranking.current") if actual else "") + record["alias"],
                       f"{record['iae']:.2f}", f"{gains['kp']:.2f} / {gains['ki']:.2f} / {gains['kd']:.2f}", status, record["date"][:10]]
-            for col, text in enumerate(values):
-                item = QTableWidgetItem(text)
+            for col, value in enumerate(values):
+                item = QTableWidgetItem(value)
                 item.setToolTip(record["date"])
                 if actual:
                     item.setBackground(QColor("#27483d"))
@@ -709,6 +710,60 @@ class MainWindow(QMainWindow):
         if hasattr(self, "stack"):
             QTimer.singleShot(0, self._reveal_current_ranking)
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        if (not self._guide_preload_started and not self._guide_preload_scheduled
+                and not self._closing):
+            self._guide_preload_scheduled = True
+            QTimer.singleShot(0, self._start_guide_preload)
+
+    def closeEvent(self, event):
+        self._closing = True
+        if hasattr(self, "timer"):
+            self.timer.stop()
+        if hasattr(self, "guide_page"):
+            if self._guide_preload_connected:
+                try:
+                    self.guide_page.preload_progress.disconnect(self._on_guide_preload_progress)
+                except (RuntimeError, TypeError):
+                    pass
+                self._guide_preload_connected = False
+            self.guide_page.cancel_preload()
+        super().closeEvent(event)
+
+    def _start_guide_preload(self):
+        self._guide_preload_scheduled = False
+        if self._closing:
+            return
+        if self.stack.currentIndex() != 0:
+            return
+        self._guide_preload_started = True
+        self._connect_guide_preload_progress()
+        self.guide_page.preload_all()
+
+    def _connect_guide_preload_progress(self):
+        if not self._guide_preload_connected:
+            self.guide_page.preload_progress.connect(self._on_guide_preload_progress)
+            self._guide_preload_connected = True
+
+    def _pause_guide_preload(self):
+        if self._closing:
+            return
+        self.guide_page.cancel_preload()
+
+    def _resume_guide_preload(self):
+        if self._closing or self.stack.currentIndex() != 0:
+            return
+        if not self._guide_preload_started:
+            self._start_guide_preload()
+            return
+        self._connect_guide_preload_progress()
+        self.guide_page.preload_all()
+
+    def _on_guide_preload_progress(self, completed: int, total: int, error_summary: str):
+        # La precarga continúa en segundo plano sin mostrar progreso en el menú.
+        pass
+
     def _draw_ranking(self, rows, ordered, current):
         chart = QChart()
         prepare_chart(chart)
@@ -716,8 +771,8 @@ class MainWindow(QMainWindow):
         positive = [value for value in values if value > 0]
         logarithmic = bool(positive) and max(values) > 30 * max(min(positive), .01)
         display_value = (lambda value: math.log10(1 + value)) if logarithmic else (lambda value: value)
-        chart.setTitle("PUNTAJE DE ERROR · LOG₁₀" if logarithmic else "PUNTAJE DE ERROR")
-        historical, actual = QBarSet("Histórico"), QBarSet("Actual")
+        chart.setTitle(text("ranking.chart_title_log") if logarithmic else text("ranking.chart_title"))
+        historical, actual = QBarSet(text("ranking.series_history")), QBarSet(text("ranking.series_current"))
 
         # Degradado azul/cyan tecnológico para barras históricas
         hist_grad = QLinearGradient(0, 1, 0, 0)
@@ -754,10 +809,10 @@ class MainWindow(QMainWindow):
 
         x, y = QBarCategoryAxis(), QValueAxis()
         x.append(categories)
-        x.setTitleText("Puesto  ·  (verde = intento actual)")
+        x.setTitleText(text("ranking.axis_position_current"))
         y.setRange(0, max(1, display_value(max(values))*1.18))
         y.setLabelFormat("%.1f")
-        y.setTitleText("log₁₀(1 + IAE)" if logarithmic else "Puntaje de error")
+        y.setTitleText(text("ranking.axis_score_log") if logarithmic else text("ranking.axis_score"))
 
         x.setLabelsFont(QFont(FONT_DATA, 10))
         x.setTitleFont(QFont(FONT_BODY, 9, QFont.Weight.Medium))
@@ -790,7 +845,10 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentIndex(4)
 
     def close_guide(self):
-        self.stack.setCurrentIndex(getattr(self, "guide_return_index", 0))
+        return_index = getattr(self, "guide_return_index", 0)
+        self.stack.setCurrentIndex(return_index)
+        if return_index == 0:
+            self._resume_guide_preload()
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_F11:
@@ -806,11 +864,12 @@ class MainWindow(QMainWindow):
         self.game.reset()
         self.stack.setCurrentIndex(0)
         self.start_warning.setText(self.ranking.warning)
+        self._resume_guide_preload()
 
 
 def main():
     app = QApplication(sys.argv)
-    app.setApplicationName("PID / Control Arena")
+    app.setApplicationName(text("menu.brand"))
     configure_app(app)
     window = MainWindow()
     window.showMaximized()

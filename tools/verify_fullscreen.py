@@ -6,6 +6,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import json
+import time
 from PySide6.QtWidgets import QApplication
 from PySide6.QtTest import QTest
 from pid_game.ui import MainWindow, configure_app
@@ -27,7 +28,7 @@ out.mkdir(parents=True, exist_ok=True)
 app = QApplication.instance() or QApplication(sys.argv)
 configure_app(app)
 data = out / 'ranking-qa.json'
-data.write_text(json.dumps({'schema': 1, 'challenge': CHALLENGE, 'records': []}), encoding='utf-8')
+data.write_text(json.dumps({'schema': 2, 'challenge': CHALLENGE, 'records': []}), encoding='utf-8')
 window = MainWindow(data)
 window.setWindowTitle('PID - revisión visual')
 window.showMaximized()
@@ -40,6 +41,13 @@ def capture(name):
     target = out / (name + '.png')
     window.grab().save(str(target))
     print(name, window.size().width(), window.size().height(), window.isMaximized(), target)
+
+def wait_guide(key):
+    deadline = time.monotonic() + 30
+    while key not in window.guide_page.presets and time.monotonic() < deadline:
+        QTest.qWait(50)
+    if key not in window.guide_page.presets:
+        raise RuntimeError(f'No se pudo cargar la guía: {key}')
 
 def finish_run(transition_name=None):
     window._render_sample(round(DURATION*1000))
@@ -60,12 +68,16 @@ def next_attempt():
 
 capture('inicio')
 window.open_guide('iae')
+wait_guide('iae')
 capture('guia_iae')
 window.open_guide('kp')
+wait_guide('kp')
 capture('guia_kp')
 window.open_guide('ki')
+wait_guide('ki')
 capture('guia_ki')
 window.open_guide('kd')
+wait_guide('kd')
 capture('guia_kd')
 window.close_guide()
 window.start_game()

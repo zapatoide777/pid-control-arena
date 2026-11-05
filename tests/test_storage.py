@@ -20,7 +20,7 @@ def completed_game(alias="Jugador", final=Gains()):
     return game
 
 
-def test_missing_file_persistence_final_only_and_idempotence(tmp_path):
+def test_missing_file_persistence_best_attempt_and_idempotence(tmp_path):
     path = tmp_path / "nested" / "ranking.json"
     ranking = Ranking(path)
     assert ranking.records == [] and not path.exists()
@@ -28,12 +28,13 @@ def test_missing_file_persistence_final_only_and_idempotence(tmp_path):
     record = ranking.add_game(game)
     ranking.add_game(game)
     assert len(ranking.records) == 1
+    assert json.loads(path.read_text(encoding="utf-8"))["schema"] == 2
     restored = Ranking(path)
     assert restored.records == [record]
-    assert record["iae"] == game.attempts[2].iae
-    assert record["iae"] != game.attempts[0].iae
-    assert record["gains"] == {"kp": .6, "ki": .02, "kd": .08}
+    assert record["iae"] == game.final.iae
+    assert record["gains"] == {"kp": 2, "ki": 1, "kd": .5}
     assert record["alias"] == "María"
+    assert "fallen" not in record
     assert not path.with_suffix(".json.tmp").exists()
 
 
@@ -42,10 +43,32 @@ def test_ranking_uses_only_iae_and_stable_tie_order(tmp_path):
     a = ranking.add_game(completed_game("primero"))
     b = ranking.add_game(completed_game("segundo"))
     c = ranking.add_game(completed_game("tercero", Gains(2, 1, .5)))
-    assert [r["id"] for r in ranking.ordered()] == [c["id"], a["id"], b["id"]]
-    # El flag educativo no participa en el orden.
-    a["iae"], a["fallen"], a["success"] = 0.01, True, False
+    assert [r["id"] for r in ranking.ordered()] == [a["id"], b["id"], c["id"]]
+    # El éxito no participa en el orden.
+    a["iae"], a["success"] = 0.01, False
     assert ranking.ordered()[0] is a
+
+
+def test_previous_v9_challenge_is_archived_before_new_ranking(tmp_path):
+    path = tmp_path / "ranking.json"
+    old = {"schema": 1,
+           "challenge": "pivot-v9-dcmotor-r2-l.16-k.333-v12-i6-coulomb.015-step5-45deg-w2-T15-dt.001-iae-deg",
+           "records": []}
+    path.write_text(json.dumps(old), encoding="utf-8")
+    ranking = Ranking(path)
+    assert ranking.records == [] and "incompatible" in ranking.warning
+    backups = list(tmp_path.glob("ranking.json.backup-*"))
+    assert len(backups) == 1 and json.loads(backups[0].read_text()) == old
+
+
+def test_schema_one_ranking_is_archived_even_with_current_challenge(tmp_path):
+    path = tmp_path / "ranking.json"
+    old = {"schema": 1, "challenge": CHALLENGE, "records": []}
+    path.write_text(json.dumps(old), encoding="utf-8")
+    ranking = Ranking(path)
+    assert ranking.records == [] and "incompatible" in ranking.warning
+    backups = list(tmp_path.glob("ranking.json.backup-*"))
+    assert len(backups) == 1 and json.loads(backups[0].read_text()) == old
 
 
 @pytest.mark.parametrize("content", ["{broken", "[]", '{"schema": 99}',
@@ -106,7 +129,7 @@ def test_huge_numbers_in_corrupt_ranking_do_not_crash_startup(tmp_path, field):
     ranking = Ranking(path)
     record = ranking.add_game(completed_game())
     record[field] = 10**400 if field == "iae" else {"kp": 10**400, "ki": 0, "kd": 0}
-    path.write_text(json.dumps({"schema": 1, "challenge": CHALLENGE, "records": [record]}), encoding="utf-8")
+    path.write_text(json.dumps({"schema": 2, "challenge": CHALLENGE, "records": [record]}), encoding="utf-8")
     restored = Ranking(path)
     assert restored.records == []
     assert restored.warning

@@ -8,11 +8,11 @@ from __future__ import annotations
 import math
 from typing import Callable, Optional
 
-from PySide6.QtCore import Qt, QPointF
-from PySide6.QtGui import QColor, QFont, QPen, QBrush, QPainter
+from PySide6.QtCore import Qt, QPointF, QObject, QRunnable, QThreadPool, Signal
+from PySide6.QtGui import QColor, QPen, QBrush, QPainter
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QFrame, QButtonGroup, QScrollArea, QSizePolicy
+    QFrame, QButtonGroup, QScrollArea
 )
 from PySide6.QtCharts import (
     QChart, QChartView, QLineSeries, QAreaSeries, QValueAxis
@@ -20,106 +20,133 @@ from PySide6.QtCharts import (
 
 from .controller import Gains
 from .simulation import simulate, Result, DURATION, STEP_TIME, STEP_DEGREES
-from .theme import BG, TEXT, MUTED, CYAN, LIME, CORAL, FONT_DISPLAY, FONT_BODY, FONT_DATA
+from .theme import MUTED, CYAN, LIME, CORAL, FONT_DISPLAY, FONT_BODY
 from .motion import ArcadeButton
+from .textos import text
 
 
 TOPICS = {
     "iae": {
-        "tab": "📊  ¿Qué es el IAE?",
-        "title": "IAE: Puntuación y Área de Error",
-        "subtitle": "Integral of Absolute Error · La métrica que define tu podio",
+        "tab": "¿Qué es el IAE?",
+        "title": "IAE · Error acumulado",
+        "subtitle": "El área total del error durante la prueba",
         "concept": (
-            "El IAE mide la desviación total acumulada entre la posición real del péndulo θ(t) "
-            "y la referencia deseada durante los 15 segundos de simulación:\n\n"
-            "    IAE = ∫ |r(t) - θ(t)| dt   [grados · segundo]\n\n"
-            "Visualmente, el puntaje equivale al área sombreada entre tu curva y la meta."
+            "El IAE suma el error angular absoluto durante los 15 s:\n\n"
+            "    IAE = ∫ |r(t) − θ(t)| dt   [grados · segundo]\n\n"
+            "Menor área significa menor error acumulado."
         ),
         "rules": [
-            "Menor puntaje es mejor: un control perfecto acumula mínima área (< 50 pts).",
-            "Penalización simétrica: pasarse o quedarse corto por 5° suma exactamente lo mismo.",
-            "El error sostenido arruina el puntaje: estar desviado 11° durante 10 s suma 110 pts directos.",
-            "La caída descalifica: sobrepasar los ±90° impide clasificar al ranking.",
+            "Cada segundo de error suma al puntaje.",
+            "Desviarse a cualquiera de los dos lados aporta lo mismo.",
+            "El ranking ordena por IAE.",
         ],
         "before_label": "Antes: Control deficiente",
         "before_gains": Gains(0.8, 0.05, 0.1),
-        "before_desc": "Oscilaciones prolongadas y lenta corrección (gran área acumulada)",
+        "before_desc": "Respuesta con mayor error acumulado.",
         "after_label": "Después: Control calibrado",
         "after_gains": Gains(2.5, 0.8, 0.5),
-        "after_desc": "Rápido acoplamiento a la meta con mínima área de penalización",
-        "alert": "💡 Consejo docente: Para bajar tu IAE, busca llegar rápido a los 45° y amortiguar sin sobrepico ni rebotes.",
+        "after_desc": "Respuesta con menor error acumulado.",
+        "alert": "La referencia cambia de 0° a 45° en el segundo 5.",
         "show_area": True,
     },
     "kp": {
-        "tab": "⚡  Kp · Proporcional",
-        "title": "Parámetro Kp · La Fuerza de Reacción",
-        "subtitle": "Genera torque directamente proporcional al error presente",
+        "tab": "Kp · Proporcional",
+        "title": "Kp · Acción proporcional",
+        "subtitle": "Corrige según el error actual",
         "concept": (
-            "Kp actúa como un resorte torsional. Aplica una fuerza proporcional a la distancia a la meta:\n\n"
-            "    τ_p = Kp · (referencia - θ)\n\n"
-            "Cuanto más lejos esté la barra de la meta, con más fuerza empuja el motor."
+            "Kp genera torque proporcional al error actual:\n\n"
+            "    τ_p = Kp · (referencia − θ)"
         ),
         "rules": [
-            "Aporte principal: Levanta la barra y se opone al empujón inicial de 2 rad/s.",
-            "Aislamiento de variables: Se comparan Kp=0.40 vs Kp=2.50 manteniendo Ki=0.80 y Kd=0.50 fijos.",
-            "Efecto visual: Un Kp adecuado reacciona de inmediato y acorta el tiempo de subida.",
+            "Compara Kp=0.40 y 2.50; Ki y Kd quedan fijos.",
+            "Más Kp intensifica la corrección.",
+            "Un valor alto puede aumentar el sobrepaso o la saturación.",
         ],
-        "before_label": "Antes: Kp = 0.40 (Demasiado débil)",
+        "before_label": "Antes: Kp = 0.40",
         "before_gains": Gains(0.4, 0.8, 0.5),
-        "before_desc": "El motor no vence el empujón inicial ni la gravedad; la barra cae desplomada",
-        "after_label": "Después: Kp = 2.50 (Fuerza adecuada)",
+        "before_desc": "Respuesta con menor Kp.",
+        "after_label": "Después: Kp = 2.50",
         "after_gains": Gains(2.5, 0.8, 0.5),
-        "after_desc": "Absorbe el impacto en < 2 s y eleva la barra con rapidez hacia los 45°",
-        "alert": "⚠️ Riesgo de exceso: Si Kp > 6.0, el motor satura su voltaje (±12 V) y causa oscilaciones destructivas.",
+        "after_desc": "Respuesta con mayor Kp; Ki y Kd no cambian.",
+        "alert": "Aumentar Kp no garantiza menor error en todos los tramos.",
         "show_area": False,
     },
     "ki": {
-        "tab": "🔄  Ki · Integral",
-        "title": "Parámetro Ki · La Memoria contra la Gravedad",
-        "subtitle": "Acumula el error en el tiempo para eliminar el desvío permanente",
+        "tab": "Ki · Integral",
+        "title": "Ki · Acción integral",
+        "subtitle": "Acumula el error a lo largo del tiempo",
         "concept": (
-            "Ki tiene memoria histórica. Suma el error que persiste en el tiempo:\n\n"
-            "    τ_i = Ki · ∫ (referencia - θ) dt\n\n"
-            "Su misión indispensable es sostener la barra inclinada a 45° contra la fuerza de gravedad."
+            "Ki acumula el error para corregir desviaciones persistentes:\n\n"
+            "    τ_i = Ki · ∫ (referencia − θ) dt"
         ),
         "rules": [
-            "Física real a 45°: La gravedad ejerce un torque constante de ~0.416 N·m.",
-            "Sin Ki (Ki = 0.00): El motor solo genera fuerza si hay error; queda estancado en 56.2° (+11.2° de error continuo).",
-            "Con Ki (Ki = 0.80): La integral acumula fuerza y anula totalmente el desvío, clavando 45.0° exactos.",
+            "Compara Ki=0.00 y 0.80; Kp y Kd quedan fijos.",
+            "Ki puede reducir el error que persiste.",
+            "Un valor excesivo puede causar windup y sobrepaso.",
         ],
         "before_label": "Antes: Ki = 0.00 (Sin memoria)",
         "before_gains": Gains(2.5, 0.0, 0.5),
-        "before_desc": "Estancado en 56.2° (error permanente de +11.2° que viola la tolerancia)",
-        "after_label": "Después: Ki = 0.80 (Cero error estacionario)",
+        "before_desc": "Sin acción integral.",
+        "after_label": "Después: Ki = 0.80",
         "after_gains": Gains(2.5, 0.8, 0.5),
-        "after_desc": "Anula el error residual por completo, llevando la barra a 45.0° exactos",
-        "alert": "⚠️ Riesgo de exceso: Un Ki desmedido (> 2.0) acumula demasiada inercia (windup) y produce sobrepaso excesivo.",
+        "after_desc": "Con acción integral; Kp y Kd no cambian.",
+        "alert": "El anti-windup limita la acumulación cuando el actuador satura.",
         "show_area": False,
     },
     "kd": {
-        "tab": "🛡️  Kd · Derivativo",
-        "title": "Parámetro Kd · El Freno Amortiguador",
-        "subtitle": "Anticipa el movimiento observando la velocidad para evitar rebotes",
+        "tab": "Kd · Derivativo",
+        "title": "Kd · Acción derivativa",
+        "subtitle": "Amortigua usando la velocidad medida",
         "concept": (
-            "Kd mide la velocidad angular de la barra y aplica un torque contrario:\n\n"
-            "    τ_d = -Kd · ω\n\n"
-            "Funciona como un amortiguador viscoso inteligente que frena la barra cuando viaja rápido."
+            "Kd aplica torque opuesto a la velocidad angular medida. La derivada se filtra:\n\n"
+            "    τ_d = −Kd · ω filtrada"
         ),
         "rules": [
-            "Anticipación: Predice hacia dónde va el péndulo y frena antes de que se pase de la meta.",
-            "Sin Kd (Kd = 0.05): El sistema es subamortiguado; al subir a 45° rebota violentamente hasta caer.",
-            "Con Kd (Kd = 0.50): Asienta la barra suavemente en la referencia sin sobrepico ni oscilaciones.",
+            "Compara Kd=0.05 y 0.50; Kp y Ki quedan fijos.",
+            "Más Kd suele reducir el rebote.",
+            "Demasiado Kd puede volver lenta la respuesta.",
         ],
-        "before_label": "Antes: Kd = 0.05 (Subamortiguado)",
+        "before_label": "Antes: Kd = 0.05",
         "before_gains": Gains(2.5, 0.8, 0.05),
-        "before_desc": "Rebotes violentos de resonancia al cambiar de posición hasta perder el equilibrio",
-        "after_label": "Después: Kd = 0.50 (Amortiguación óptima)",
+        "before_desc": "Menor amortiguación.",
+        "after_label": "Después: Kd = 0.50",
         "after_gains": Gains(2.5, 0.8, 0.5),
-        "after_desc": "Frenado suave y seguro al aproximarse a los 45°, logrando estabilidad limpia",
-        "alert": "⚠️ Riesgo de exceso: Un Kd exagerado (> 2.0) vuelve al péndulo pesado y lento para reaccionar.",
+        "after_desc": "Mayor amortiguación; Kp y Ki no cambian.",
+        "alert": "La derivada medida evita el salto que produciría derivar la referencia.",
         "show_area": False,
     },
 }
+
+# Los parámetros y las ganancias permanecen aquí; el contenido textual se edita
+# en textos_es.json.
+for _key in TOPICS:
+    for _field in ("tab", "title", "subtitle", "concept", "alert", "before_label", "after_label", "before_desc", "after_desc"):
+        TOPICS[_key][_field] = text(f"guide.{_key}.{_field}")
+    TOPICS[_key]["rules"][-1] = text(f"guide.{_key}.rule")
+
+
+class _SimulationSignals(QObject):
+    completed = Signal(str, object, object, str)
+
+
+class _SimulationTask(QRunnable):
+    """Calcula un par fuera del hilo de la interfaz; nunca toca widgets."""
+
+    def __init__(self, key: str, topic: dict):
+        super().__init__()
+        self.key = key
+        self.topic = topic
+        self.signals = _SimulationSignals()
+
+    def run(self):
+        before = after = None
+        error = ""
+        try:
+            before = simulate(self.topic["before_gains"])
+            after = simulate(self.topic["after_gains"])
+        except Exception as exc:  # pass failures back to the UI thread
+            error = f"{type(exc).__name__}: {exc}"
+        self.signals.completed.emit(self.key, before, after, error)
 
 
 class EducationalChart(QWidget):
@@ -127,7 +154,7 @@ class EducationalChart(QWidget):
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
-        self.mode = "both"  # "both", "before", "after"
+        self.mode = "before"  # "both", "before", "after"
         self.current_topic: Optional[dict] = None
         self.before_res: Optional[Result] = None
         self.after_res: Optional[Result] = None
@@ -139,19 +166,25 @@ class EducationalChart(QWidget):
         # Barra de control superior del gráfico
         top_bar = QHBoxLayout()
         top_bar.setContentsMargins(4, 0, 4, 0)
-        self.legend_label = QLabel("CURVAS:  🔴 ANTES (PROBLEMA)   vs   🔵 DESPUÉS (SOLUCIÓN)")
+        self.legend_label = QLabel()
+        self.legend_label.setTextFormat(Qt.TextFormat.RichText)
+        self._set_legend()
         self.legend_label.setStyleSheet(f"color: {MUTED}; font-size: 11px; font-weight: 600; font-family: '{FONT_BODY}';")
-        top_bar.addWidget(self.legend_label)
+        layout.addWidget(self.legend_label)
         top_bar.addStretch()
 
-        self.btn_both = ArcadeButton("Ambas superpuestas")
-        self.btn_before = ArcadeButton("Solo Antes")
-        self.btn_after = ArcadeButton("Solo Después")
+        self.btn_both = ArcadeButton(text("guide.both"))
+        self.btn_before = ArcadeButton(text("guide.before_only"))
+        self.btn_after = ArcadeButton(text("guide.after_only"))
         for b in (self.btn_both, self.btn_before, self.btn_after):
             b.setObjectName("secondary")
             b.setFixedHeight(28)
             b.setStyleSheet("padding: 4px 12px; font-size: 11px; min-height: 20px;")
             top_bar.addWidget(b)
+
+        for button in (self.btn_both, self.btn_before, self.btn_after):
+            button.setCheckable(True)
+        self.btn_before.setChecked(True)
 
         self.btn_both.clicked.connect(lambda: self.set_mode("both"))
         self.btn_before.clicked.connect(lambda: self.set_mode("before"))
@@ -167,15 +200,17 @@ class EducationalChart(QWidget):
 
         self.view = QChartView(self.chart)
         self.view.setRenderHint(QPainter.RenderHint.Antialiasing)
-        self.view.setStyleSheet("border: 1px solid #1a334b; border-radius: 6px; background: #12243a;")
+        self.view.setStyleSheet("border: none; background: #12243a;")
         layout.addWidget(self.view, 1)
 
         # Ejes
         self.x_axis = QValueAxis()
         self.x_axis.setRange(-0.3, DURATION)
-        self.x_axis.setTickCount(9)
-        self.x_axis.setLabelFormat("%.0f s")
-        self.x_axis.setTitleText("Tiempo (s)")
+        self.x_axis.setTickType(QValueAxis.TickType.TicksDynamic)
+        self.x_axis.setTickAnchor(0)
+        self.x_axis.setTickInterval(2)
+        self.x_axis.setLabelFormat("%.0f")
+        self.x_axis.setTitleText(text("guide.x_axis"))
         self.x_axis.setTitleBrush(QBrush(QColor(MUTED)))
         self.x_axis.setLabelsBrush(QBrush(QColor(MUTED)))
         self.x_axis.setGridLinePen(QPen(QColor(36, 62, 84, 120), 1, Qt.PenStyle.DashLine))
@@ -185,8 +220,10 @@ class EducationalChart(QWidget):
         self.y_axis = QValueAxis()
         self.y_axis.setRange(-20, 70)
         self.y_axis.setTickCount(6)
-        self.y_axis.setLabelFormat("%.0f°")
-        self.y_axis.setTitleText("Ángulo (°)")
+        # Dejar los ticks numéricos evita que Qt Charts sustituya el glifo °
+        # por un carácter de reemplazo en algunos entornos de Windows.
+        self.y_axis.setLabelFormat("%.0f")
+        self.y_axis.setTitleText(text("guide.y_axis"))
         self.y_axis.setTitleBrush(QBrush(QColor(MUTED)))
         self.y_axis.setLabelsBrush(QBrush(QColor(MUTED)))
         self.y_axis.setGridLinePen(QPen(QColor(36, 62, 84, 120), 1, Qt.PenStyle.DashLine))
@@ -207,29 +244,36 @@ class EducationalChart(QWidget):
         self.push_series.attachAxis(self.y_axis)
 
         # Series dinámicas persistentes (evitan recreación y recolección de basura C++)
-        self.area_upper = QLineSeries()
-        self.area_lower = QLineSeries()
-        self.area_series = QAreaSeries(self.area_upper, self.area_lower)
-        self.area_series.setPen(QPen(Qt.PenStyle.NoPen))
-        self.area_series.setBrush(QBrush(QColor(93, 216, 240, 45)))
-        self.chart.addSeries(self.area_series)
-        self.area_series.attachAxis(self.x_axis)
-        self.area_series.attachAxis(self.y_axis)
-        self.area_series.hide()
+        self.areas = {}
+        for name, color in (("before", CORAL), ("after", CYAN)):
+            upper, lower = QLineSeries(), QLineSeries()
+            area = QAreaSeries(upper, lower)
+            area.setPen(QPen(Qt.PenStyle.NoPen))
+            fill = QColor(color)
+            fill.setAlpha(65)
+            area.setBrush(QBrush(fill))
+            self.chart.addSeries(area)
+            area.attachAxis(self.x_axis)
+            area.attachAxis(self.y_axis)
+            area.hide()
+            self.areas[name] = (area, upper, lower)
 
         self.before_series = QLineSeries()
-        self.before_series.setPen(QPen(QColor(CORAL), 2.2, Qt.PenStyle.DashLine))
+        before_pen = QPen(QColor(CORAL), 2.4, Qt.PenStyle.DashLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+        self.before_series.setPen(before_pen)
         self.chart.addSeries(self.before_series)
         self.before_series.attachAxis(self.x_axis)
         self.before_series.attachAxis(self.y_axis)
 
         self.after_series = QLineSeries()
-        self.after_series.setPen(QPen(QColor(CYAN), 2.8, Qt.PenStyle.SolidLine))
+        after_pen = QPen(QColor(CYAN), 2.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+        self.after_series.setPen(after_pen)
         self.chart.addSeries(self.after_series)
         self.after_series.attachAxis(self.x_axis)
         self.after_series.attachAxis(self.y_axis)
 
         self._draw_reference_and_push()
+        self.set_mode("before")
 
     def _draw_reference_and_push(self):
         self.ref_series.clear()
@@ -239,85 +283,128 @@ class EducationalChart(QWidget):
         self.ref_series.append(DURATION, STEP_DEGREES)
 
         self.push_series.clear()
-        self.push_series.append(0, -1000)
-        self.push_series.append(0, 1000)
+        # El empujón permanece en la simulación; se omite su marcador aquí
+        # para no confundirlo con la curva de la comparativa anterior.
+
+    def _set_legend(self):
+        self.legend_label.setText(
+            f'{text("guide.legend_curves")} <span style="color:{CORAL};">┄┄ {text("guide.legend_before")}</span>'
+            f' &nbsp; <span style="color:{CYAN};">━━ {text("guide.legend_after")}</span>'
+            f' &nbsp; <span style="color:{LIME};">┄┄ {text("guide.legend_reference")}</span>'
+            + (f' &nbsp; <span style="color:{CORAL};">■ {text("guide.legend_area_before")}</span>'
+               f' &nbsp; <span style="color:{CYAN};">■ {text("guide.legend_area_after")}</span>'
+               if self.current_topic and self.current_topic.get("show_area") else "")
+        )
+
+    def clear_scenario(self):
+        """Oculta las series mientras se calcula la pestaña seleccionada."""
+        self.current_topic = None
+        self.before_res = None
+        self.after_res = None
+        self.before_series.clear()
+        self.after_series.clear()
+        for _, upper, lower in self.areas.values():
+            upper.clear()
+            lower.clear()
+        self._set_series_visibility()
+        self.legend_label.setText(f"<span style=\"color:{MUTED};\">Preparando comparativa…</span>")
 
     def set_mode(self, mode: str):
+        if mode not in ("both", "before", "after"):
+            mode = "both"
         self.mode = mode
+        self.btn_both.setChecked(mode == "both")
+        self.btn_before.setChecked(mode == "before")
+        self.btn_after.setChecked(mode == "after")
         # Resaltar botón activo
-        self.btn_both.setStyleSheet("background: #1c364e; border-color: #5dd8f0;" if mode == "both" else "")
-        self.btn_before.setStyleSheet("background: #1c364e; border-color: #5dd8f0;" if mode == "before" else "")
-        self.btn_after.setStyleSheet("background: #1c364e; border-color: #5dd8f0;" if mode == "after" else "")
-        self._refresh_curves()
+        for button, button_mode in ((self.btn_both, "both"), (self.btn_before, "before"), (self.btn_after, "after")):
+            active = button_mode == mode
+            button.setStyleSheet(
+                "padding: 4px 12px; font-size: 11px; min-height: 20px; "
+                + ("background: #1c364e; border: 1px solid #5dd8f0;" if active else "")
+            )
+        self._set_series_visibility()
 
     def render_scenario(self, topic: dict, before_res: Result, after_res: Result):
         self.current_topic = topic
         self.before_res = before_res
         self.after_res = after_res
-        self._refresh_curves()
+        self._set_legend()
 
-    def _refresh_curves(self):
-        if not self.before_res or not self.after_res or not self.current_topic:
-            return
+        # Ajustar el eje una vez por tema. El pico conserva la escala completa,
+        # incluso si el modo visible muestra una sola curva.
+        angles = [math.degrees(sample.angle) for result in (before_res, after_res) for sample in result.samples]
+        self.y_axis.setRange(min(-20.0, min(angles) * 1.1), max(60.0, max(angles) * 1.1))
 
-        # Ajuste adaptativo del eje Y según picos de las curvas a mostrar
-        all_samples = []
-        if self.mode in ("both", "before"):
-            all_samples.extend(self.before_res.samples)
-        if self.mode in ("both", "after"):
-            all_samples.extend(self.after_res.samples)
-
-        if all_samples:
-            min_deg = min(math.degrees(s.angle) for s in all_samples)
-            max_deg = max(math.degrees(s.angle) for s in all_samples)
-            y_min = min(-25.0, min_deg * 1.15)
-            y_max = max(70.0, max_deg * 1.15)
-            self.y_axis.setRange(y_min, y_max)
-
-        # Curva Antes (problema)
+        # Limitar la geometría que llega a Qt Charts. El motor conserva todas
+        # las muestras para IAE y métricas; la curva y el sombreado son una vista.
         self.before_series.clear()
-        if self.mode in ("both", "before"):
-            points = [QPointF(s.time, math.degrees(s.angle)) for s in self.before_res.samples[::3]]
-            self.before_series.append(points)
-            self.before_series.show()
-        else:
-            self.before_series.hide()
+        before_samples = self._plot_samples(before_res.samples, 1800, preserve_step=True)
+        points = [QPointF(s.time, math.degrees(s.angle)) for s in before_samples]
+        self.before_series.append(points)
 
-        # Curva Después (solución)
         self.after_series.clear()
-        if self.mode in ("both", "after"):
-            points = [QPointF(s.time, math.degrees(s.angle)) for s in self.after_res.samples[::3]]
-            self.after_series.append(points)
-            self.after_series.show()
-        else:
-            self.after_series.hide()
+        after_samples = self._plot_samples(after_res.samples, 1800, preserve_step=True)
+        points = [QPointF(s.time, math.degrees(s.angle)) for s in after_samples]
+        self.after_series.append(points)
 
-        # Sombreado de área para IAE
-        self.area_upper.clear()
-        self.area_lower.clear()
-        if self.current_topic.get("show_area") and self.mode in ("both", "after"):
-            top_pts = []
-            bot_pts = []
-            for s in self.after_res.samples[::4]:
-                deg = math.degrees(s.angle)
-                ref = math.degrees(s.reference)
-                top_pts.append(QPointF(s.time, max(deg, ref)))
-                bot_pts.append(QPointF(s.time, min(deg, ref)))
-            self.area_upper.append(top_pts)
-            self.area_lower.append(bot_pts)
-            self.area_series.show()
-        else:
-            self.area_series.hide()
+        # Cada curva tiene su propia área entre la respuesta y la referencia.
+        for name, result in (("before", before_res), ("after", after_res)):
+            _, upper, lower = self.areas[name]
+            upper.clear()
+            lower.clear()
+            if topic.get("show_area"):
+                top_pts, bot_pts = [], []
+                for sample in self._plot_samples(result.samples, 240, preserve_step=True):
+                    deg = math.degrees(sample.angle)
+                    ref = math.degrees(sample.reference)
+                    top_pts.append(QPointF(sample.time, max(deg, ref)))
+                    bot_pts.append(QPointF(sample.time, min(deg, ref)))
+                upper.append(top_pts)
+                lower.append(bot_pts)
+        self._set_series_visibility()
+
+    @staticmethod
+    def _plot_samples(samples, max_points: int, preserve_step: bool = False):
+        if len(samples) <= max_points:
+            return samples
+        stride = max(1, math.ceil((len(samples) - 1) / max(1, max_points - 1)))
+        indexes = set(range(0, len(samples), stride))
+        indexes.add(len(samples) - 1)
+        if preserve_step and len(samples) > 1:
+            sample_dt = samples[1].time - samples[0].time
+            step_index = round(STEP_TIME / sample_dt)
+            indexes.update(i for i in (step_index - 1, step_index) if 0 <= i < len(samples))
+        return [samples[index] for index in sorted(indexes)]
+
+    def _set_series_visibility(self):
+        has_result = self.before_res is not None and self.after_res is not None
+        self.before_series.setVisible(has_result and self.mode in ("both", "before"))
+        self.after_series.setVisible(has_result and self.mode in ("both", "after"))
+        for name, (area, _, _) in self.areas.items():
+            area.setVisible(bool(
+                has_result and self.current_topic
+                and self.current_topic.get("show_area")
+                and self.mode in ("both", name)
+            ))
 
 
 class EducationalGuidePage(QWidget):
     """Página didáctica completa integrada en el QStackedWidget de MainWindow."""
 
+    preload_progress = Signal(int, int, str)
+
     def __init__(self, on_back: Callable[[], None], parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.on_back = on_back
         self.presets: dict[str, tuple[Result, Result]] = {}
-        self._precompute_simulations()
+        self._tasks: dict[str, _SimulationTask] = {}
+        self._pending_keys: list[str] = []
+        self._running_key: Optional[str] = None
+        self.current_topic_key = "iae"
+        self._preloading = False
+        self._preload_done: set[str] = set()
+        self._preload_errors: dict[str, str] = {}
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(24, 20, 24, 20)
@@ -326,15 +413,15 @@ class EducationalGuidePage(QWidget):
         # 1. Cabecera superior: Título general y botón Volver
         header = QHBoxLayout()
         title_box = QVBoxLayout()
-        lbl_title = QLabel("GUÍA DIDÁCTICA · CONTROL PID & IAE")
+        lbl_title = QLabel(text("guide.title"))
         lbl_title.setStyleSheet(f"font-family: '{FONT_DISPLAY}'; font-size: 20px; font-weight: 700; color: #eaf5fc; letter-spacing: 1px;")
-        lbl_sub = QLabel("Conceptos físicos, métricas y comparativas de sintonización con el motor no lineal")
+        lbl_sub = QLabel(text("guide.subtitle"))
         lbl_sub.setStyleSheet(f"color: {MUTED}; font-size: 13px; font-family: '{FONT_BODY}';")
         title_box.addWidget(lbl_title)
         title_box.addWidget(lbl_sub)
         header.addLayout(title_box, 1)
 
-        self.btn_back = ArcadeButton("←  Volver al menú")
+        self.btn_back = ArcadeButton(text("guide.back"))
         self.btn_back.setObjectName("secondary")
         self.btn_back.clicked.connect(self.on_back)
         header.addWidget(self.btn_back)
@@ -352,6 +439,7 @@ class EducationalGuidePage(QWidget):
             btn.setFixedHeight(36)
             btn.setStyleSheet("font-size: 13px; font-weight: 600; padding: 6px 16px;")
             self.tab_buttons[key] = btn
+            btn.setCheckable(True)
             self.tab_group.addButton(btn)
             tabs_layout.addWidget(btn)
             btn.clicked.connect(lambda _, k=key: self.select_tab(k))
@@ -375,6 +463,7 @@ class EducationalGuidePage(QWidget):
 
         # Elementos de texto dinámicos
         self.lbl_topic_title = QLabel()
+        self.lbl_topic_title.setWordWrap(True)
         self.lbl_topic_title.setStyleSheet(f"font-family: '{FONT_DISPLAY}'; font-size: 18px; font-weight: 700; color: {CYAN};")
         self.left_layout.addWidget(self.lbl_topic_title)
 
@@ -385,42 +474,49 @@ class EducationalGuidePage(QWidget):
 
         # Caja de concepto principal
         self.frame_concept = QFrame()
-        self.frame_concept.setStyleSheet("background: #102238; border: 1px solid #1a334b; border-radius: 6px; padding: 12px;")
+        self.frame_concept.setStyleSheet("background: transparent; border: none;")
         v_concept = QVBoxLayout(self.frame_concept)
-        v_concept.setContentsMargins(8, 8, 8, 8)
+        v_concept.setContentsMargins(0, 0, 0, 0)
         self.lbl_concept = QLabel()
         self.lbl_concept.setWordWrap(True)
         self.lbl_concept.setStyleSheet("color: #cfdbe6; font-size: 12px; line-height: 1.4;")
         v_concept.addWidget(self.lbl_concept)
         self.left_layout.addWidget(self.frame_concept)
 
+        self.lbl_rules = QLabel()
+        self.lbl_rules.setWordWrap(True)
+        self.lbl_rules.setStyleSheet("color: #cfdbe6; font-size: 12px;")
+        self.left_layout.addWidget(self.lbl_rules)
+
         # Caja de métricas Antes vs Después
         self.frame_metrics = QFrame()
-        self.frame_metrics.setStyleSheet("background: #0d1e30; border: 1px solid #1a334b; border-radius: 6px; padding: 12px;")
+        self.frame_metrics.setObjectName("guideMetrics")
+        self.frame_metrics.setStyleSheet("QFrame#guideMetrics { background: transparent; border: none; border-top: 1px solid #28445c; }")
         v_metrics = QVBoxLayout(self.frame_metrics)
-        v_metrics.setContentsMargins(8, 8, 8, 8)
+        v_metrics.setContentsMargins(0, 14, 0, 0)
         v_metrics.setSpacing(10)
 
-        lbl_comp_title = QLabel("COMPARATIVA DE DESEMPEÑO")
+        lbl_comp_title = QLabel(text("guide.compare"))
         lbl_comp_title.setStyleSheet(f"color: {MUTED}; font-size: 11px; font-weight: 700; letter-spacing: 1px;")
         v_metrics.addWidget(lbl_comp_title)
 
         self.lbl_before_metric = QLabel()
         self.lbl_before_metric.setWordWrap(True)
-        self.lbl_before_metric.setStyleSheet(f"color: {CORAL}; font-size: 12px; font-weight: 600; line-height: 1.3;")
+        self.lbl_before_metric.setStyleSheet("color: #cfdbe6; font-size: 12px;")
         v_metrics.addWidget(self.lbl_before_metric)
 
         self.lbl_after_metric = QLabel()
         self.lbl_after_metric.setWordWrap(True)
-        self.lbl_after_metric.setStyleSheet(f"color: {LIME}; font-size: 12px; font-weight: 600; line-height: 1.3;")
+        self.lbl_after_metric.setStyleSheet("color: #cfdbe6; font-size: 12px;")
         v_metrics.addWidget(self.lbl_after_metric)
         self.left_layout.addWidget(self.frame_metrics)
 
         # Caja de Alerta / Consejo
         self.frame_alert = QFrame()
-        self.frame_alert.setStyleSheet("background: #172a38; border-left: 3px solid #5dd8f0; border-radius: 4px; padding: 10px;")
+        self.frame_alert.setObjectName("guideAlert")
+        self.frame_alert.setStyleSheet("QFrame#guideAlert { background: transparent; border: none; border-left: 2px solid #5dd8f0; }")
         v_alert = QVBoxLayout(self.frame_alert)
-        v_alert.setContentsMargins(6, 6, 6, 6)
+        v_alert.setContentsMargins(12, 2, 0, 2)
         self.lbl_alert = QLabel()
         self.lbl_alert.setWordWrap(True)
         self.lbl_alert.setStyleSheet("color: #d8edf7; font-size: 12px; font-weight: 500;")
@@ -440,20 +536,97 @@ class EducationalGuidePage(QWidget):
         # Seleccionar la primera pestaña por defecto
         self.select_tab("iae")
 
+    def preload_all(self):
+        """Prepara las cuatro comparativas sin bloquear el hilo de interfaz."""
+        if self._preloading:
+            return
+        self._preloading = True
+        self._preload_done = set(self.presets)
+        self._preload_errors.clear()
+        self.preload_progress.emit(len(self._preload_done), len(TOPICS), "")
+        for key in TOPICS:
+            if key not in self._preload_done and key != self._running_key and key not in self._pending_keys:
+                self._pending_keys.append(key)
+        if len(self._preload_done) == len(TOPICS):
+            self._preloading = False
+        else:
+            self._start_next_simulation()
+
+    def cancel_preload(self):
+        """Descarta trabajo pendiente; la tarea activa termina por sí sola."""
+        self._preloading = False
+        self._pending_keys.clear()
+
     def _precompute_simulations(self):
-        """Precalcula las simulaciones didácticas una sola vez para respuesta instantánea a 60 fps."""
-        for key, info in TOPICS.items():
-            b_res = simulate(info["before_gains"])
-            a_res = simulate(info["after_gains"])
-            self.presets[key] = (b_res, a_res)
+        """Compatibilidad interna: encola la pestaña visible sin bloquear Qt."""
+        self._ensure_simulation(self.current_topic_key)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._ensure_simulation(self.current_topic_key)
+
+    def hideEvent(self, event):
+        # No empezar trabajo pendiente si el usuario ya volvió a otra pantalla.
+        if not self._preloading:
+            self._pending_keys.clear()
+        super().hideEvent(event)
+
+    def _ensure_simulation(self, key: str):
+        if key in self.presets or key == self._running_key:
+            return
+        if key in self._pending_keys:
+            # Priorizar la pestaña que el usuario acaba de seleccionar.
+            self._pending_keys.remove(key)
+            self._pending_keys.insert(0, key)
+        elif key not in self._tasks:
+            self._pending_keys.insert(0, key)
+        self._start_next_simulation()
+
+    def _start_next_simulation(self):
+        if (not self.isVisible() and not self._preloading) or self._running_key is not None or not self._pending_keys:
+            return
+        key = self._pending_keys.pop(0)
+        task = _SimulationTask(key, TOPICS[key])
+        task.signals.completed.connect(self._on_simulation_completed)
+        self._tasks[key] = task
+        self._running_key = key
+        QThreadPool.globalInstance().start(task)
+
+    def _on_simulation_completed(self, key: str, before, after, error: str):
+        self._tasks.pop(key, None)
+        if self._running_key == key:
+            self._running_key = None
+
+        if not error and before is not None and after is not None:
+            self.presets[key] = (before, after)
+            if key == self.current_topic_key and self.isVisible():
+                self._show_topic_results(key)
+        elif key == self.current_topic_key:
+            self.lbl_before_metric.setText(text("guide.error"))
+            self.lbl_after_metric.clear()
+            self.chart_view.clear_scenario()
+            self.chart_view.legend_label.setText(text("guide.unavailable"))
+
+        if self._preloading:
+            self._preload_done.add(key)
+            if error or before is None or after is None:
+                self._preload_errors[key] = error or "No se obtuvo un resultado"
+            summary = "; ".join(f"{name}: {message}" for name, message in self._preload_errors.items())
+            self.preload_progress.emit(len(self._preload_done), len(TOPICS), summary)
+            if len(self._preload_done) == len(TOPICS):
+                self._preloading = False
+
+        self._start_next_simulation()
 
     def select_tab(self, key: str):
         if key not in TOPICS:
             key = "iae"
         info = TOPICS[key]
+        self.current_topic_key = key
 
         # Resaltar botón de pestaña activo
         for k, btn in self.tab_buttons.items():
+            btn.setChecked(k == key)
             if k == key:
                 btn.setStyleSheet("background: #1c364e; border: 1.5px solid #5dd8f0; color: #5dd8f0; font-weight: 700; border-radius: 6px;")
             else:
@@ -463,29 +636,29 @@ class EducationalGuidePage(QWidget):
         self.lbl_topic_title.setText(info["title"])
         self.lbl_topic_sub.setText(info["subtitle"])
         self.lbl_concept.setText(info["concept"])
-
-        # Actualizar métricas antes vs después
-        b_res, a_res = self.presets[key]
-        b_g = info["before_gains"]
-        a_g = info["after_gains"]
-        b_state = "Caída registrada" if b_res.fallen else f"Ángulo final {math.degrees(b_res.samples[-1].angle):.1f}°"
-        a_state = "Estable dentro de ±5°" if a_res.success else "No clasifica"
-
-        self.lbl_before_metric.setText(
-            f"🔴 {info['before_label']}\n"
-            f"   Gains: Kp={b_g.kp:.2f}, Ki={b_g.ki:.2f}, Kd={b_g.kd:.2f}\n"
-            f"   Resultado: IAE = {b_res.iae:.1f} pts  ·  {b_state}\n"
-            f"   Diagnóstico: {info['before_desc']}"
-        )
-
-        self.lbl_after_metric.setText(
-            f"🟢 {info['after_label']}\n"
-            f"   Gains: Kp={a_g.kp:.2f}, Ki={a_g.ki:.2f}, Kd={a_g.kd:.2f}\n"
-            f"   Resultado: IAE = {a_res.iae:.1f} pts  ·  {a_state}\n"
-            f"   Diagnóstico: {info['after_desc']}"
-        )
-
+        self.lbl_rules.setText(info["rules"][-1])
         self.lbl_alert.setText(info["alert"])
 
-        # Renderizar en el gráfico interactivo
+        # Mostrar el contenido conceptual de inmediato y cargar simulaciones
+        # solo al necesitar la pestaña, fuera del hilo de la interfaz.
+        self.lbl_before_metric.setText(text("guide.loading"))
+        self.lbl_after_metric.clear()
+        self.chart_view.set_mode("before")
+        self.chart_view.clear_scenario()
+        if key in self.presets:
+            self._show_topic_results(key)
+        elif self.isVisible():
+            self._ensure_simulation(key)
+
+    def _show_topic_results(self, key: str):
+        info = TOPICS[key]
+        b_res, a_res = self.presets[key]
+        # Solo se revela la ganancia que se estudia en la pestaña.
+        def metric(label, result, color):
+            return f"<b style='color:{color};'>{label}</b><br>IAE = {result.iae:.1f} pts"
+
+        self.lbl_before_metric.setText(metric(info["before_label"], b_res, CORAL))
+        self.lbl_after_metric.setText(metric(info["after_label"], a_res, CYAN))
+
+        self.lbl_alert.setText(info["alert"])
         self.chart_view.render_scenario(info, b_res, a_res)

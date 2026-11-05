@@ -22,3 +22,11 @@ Para ejecutar las comprobaciones:
 ```
 
 El ranking se guarda localmente en `data/ranking.json`; un archivo incompatible o dañado se conserva con sufijo `.backup-...` antes de crear otro.
+
+## Editar los textos
+
+Los textos de la interfaz viven en `pid_game/textos_es.json`, organizados en las secciones `menu`, `game`, `report`, `hints`, `guide` y `ranking`. Cada valor final debe ser una cadena JSON. El código los obtiene mediante claves con puntos, por ejemplo `game.attempt` o `guide.kp.title`.
+
+Las plantillas usan marcadores con nombre entre llaves y conservan el formato numérico indicado. Al editar una frase, no borres, renombres ni cambies los marcadores: `game.attempt` usa `{numero}`, `game.playback` usa `{duracion}` y `{velocidad}`, `report.best_attempt` usa `{numero}` y `{estado}`, y `ranking.result` usa `{iae}`, `{puesto}` y `{total}`. La lista completa está declarada en `pid_game/textos.py`; el validador comprueba que los marcadores coincidan con ella.
+
+Guarda el archivo como UTF-8; también se admite el BOM UTF-8 que algunos editores agregan. La aplicación valida el catálogo antes de abrir la interfaz. Si el JSON tiene un error de sintaxis, el mensaje identifica el archivo, la línea y la columna. Los marcadores inválidos o incompatibles también producen un mensaje breve con la clave afectada.

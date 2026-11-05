@@ -29,10 +29,11 @@ def test_rk4_against_constant_acceleration_solution():
 
 def test_demo_fails_but_known_controller_recovers():
     demo, good = simulate(Gains()), simulate(Gains(2, 1, .5))
-    assert demo.fallen and not demo.success and demo.iae > 300
-    assert good.success and not good.fallen and good.iae < 50
+    assert not demo.success and demo.iae > 300
+    assert good.success and good.iae < 50
+    assert not hasattr(good, "fallen")
     assert hint(good) == ""
-    assert "cayó" in hint(demo)
+    assert hint(demo)
     assert len(demo.samples) == len(good.samples) == round(DURATION/DT)+1
     assert demo.samples[-1].time == DURATION
     assert demo.peak_degrees > 90  # nunca envuelve el ángulo al caer
@@ -42,7 +43,6 @@ def test_demo_fails_but_known_controller_recovers():
 def test_timestep_convergence(gains):
     coarse, fine = simulate(gains), simulate(gains, dt=.0005)
     assert coarse.success == fine.success
-    assert coarse.fallen == fine.fallen
     assert coarse.iae == pytest.approx(fine.iae, rel=.03, abs=.015)
     finer = simulate(gains, dt=.00025)
     # La demo caída es sensible al periodo digital; verificar tendencia, no
@@ -58,9 +58,9 @@ def test_iae_absolute_and_full_window_stability():
     samples = tuple(Sample(t, math.radians(a), 0, 0)
                     for t, a in [(0, 1), (4.5, -1), (STABLE_FROM, -1),
                                  (STABLE_FROM+.5, 1), (DURATION, -1)])
-    iae, success, fallen = evaluate(samples)
+    iae, success = evaluate(samples)
     assert iae == pytest.approx(DURATION)
-    assert success and not fallen
+    assert success
     boundary = (Sample(0, 0, 1, 0), Sample(4.5, math.radians(5), 0, 0),
                 Sample(STABLE_FROM, math.radians(5), 0, 0),
                 Sample(DURATION, 0, 0, 0))
@@ -78,9 +78,20 @@ def test_iae_absolute_and_full_window_stability():
                     Sample(4.8, math.radians(-4.8), 0, 0),
                     Sample(STABLE_FROM, math.radians(5), 0, 0), Sample(DURATION, 0, 0, 0))
     assert evaluate(both_windows)[1]
-    early_fall = (Sample(0, 0, 0, 0), Sample(1, math.pi/2, 0, 0)) + boundary[1:]
-    assert evaluate(early_fall)[2]
-    assert not evaluate(early_fall)[1]
+    early_excursion = (Sample(0, 0, 0, 0), Sample(1, math.pi/2, 0, 0)) + boundary[1:]
+    assert evaluate(early_excursion)[1]
+
+
+def test_excursion_past_ninety_degrees_is_not_a_separate_failure_condition():
+    samples = (Sample(0, 0, 0, 0),
+               Sample(1, math.pi/2, 0, 0),
+               Sample(4, 0, 0, 0),
+               Sample(4.5, 0, 0, 0),
+               Sample(5, 0, 0, 0, math.radians(45)),
+               Sample(14.5, math.radians(45), 0, 0, math.radians(45)),
+               Sample(15, math.radians(45), 0, 0, math.radians(45)))
+    _, success = evaluate(samples)
+    assert success
 
 
 def test_controller_limits_filter_and_antiwindup_recovery():
@@ -110,13 +121,13 @@ def test_contextual_hint_for_oscillation_and_saturation():
     result = simulate(Gains())
     samples = tuple(Sample(i*DT, math.radians(8)*math.sin(i*.02), 0, 2)
                     for i in range(round(DURATION/DT)+1))
-    response = replace(result, samples=samples, fallen=False, saturation_fraction=.3)
+    response = replace(result, samples=samples, saturation_fraction=.3)
     message = hint(response)
     assert "Oscila" in message and "Kd" in message
     assert len(message) < 100
 
 
-def test_exactly_three_attempts_demo_free_cooldown_and_final_only():
+def test_exactly_three_attempts_demo_free_cooldown_and_best_attempt():
     game = Game()
     assert game.state is State.WAITING
     game.begin("  Martín  ")
@@ -142,7 +153,11 @@ def test_exactly_three_attempts_demo_free_cooldown_and_final_only():
     game.finish_playback(30)
     assert len(game.attempts) == 3
     assert game.state is State.FINISHED
-    assert game.final is third and game.final is not first
+    assert game.final is first
+    assert game.final is min(game.attempts, key=lambda result: result.iae)
+    tied_first = replace(first, iae=1)
+    game.attempts[:] = [tied_first, replace(second, iae=1), replace(third, iae=2)]
+    assert game.final is tied_first  # empate: gana el primer intento
     with pytest.raises(RuntimeError):
         game.launch(Gains())
     game.reset()
@@ -215,7 +230,7 @@ def test_reference_step_error_integral_and_derivative_no_kick():
 def test_actuator_delay_makes_high_gains_distinct_from_good_tuning():
     good = simulate(Gains(2, 1, .5))
     aggressive = simulate(Gains(10, 5, 3))
-    assert good.success and not good.fallen
+    assert good.success
     assert not aggressive.success and aggressive.iae > 2*good.iae
     assert all(abs(s.torque) <= 2 + 1e-12 for s in aggressive.samples)
     assert all(abs(s.current) <= 6 + 1e-12 and abs(s.voltage) <= 12 + 1e-12
@@ -239,6 +254,5 @@ def test_controller_stabilizing_w2_but_failing_w1_is_rejected():
         Sample(STABLE_FROM, math.radians(45.0), 0, 0, math.radians(45)),
         Sample(DURATION, math.radians(45.0), 0, 0, math.radians(45)),
     )
-    iae, success, fallen = evaluate(samples)
+    iae, success = evaluate(samples)
     assert not success
-    assert not fallen

@@ -9,7 +9,7 @@ from .controller import Gains
 from .game import Game
 
 # Identifica planta, prueba, PID y métrica. Cambiar si se cambia el desafío.
-CHALLENGE = "pivot-v9-dcmotor-r2-l.16-k.333-v12-i6-coulomb.015-step5-45deg-w2-T15-dt.001-iae-deg"
+CHALLENGE = "pivot-v10-dcmotor-r2-l.16-k.333-v12-i6-coulomb.015-step5-45deg-w2-T15-dt.001-iae-deg"
 
 
 class Ranking:
@@ -25,7 +25,7 @@ class Ranking:
             return
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
-            if data.get("schema") != 1 or data.get("challenge") != CHALLENGE:
+            if data.get("schema") != 2 or data.get("challenge") != CHALLENGE:
                 raise ValueError("Versión o desafío incompatible.")
             records = data["records"]
             if not isinstance(records, list):
@@ -43,10 +43,8 @@ class Ranking:
                 if type(r["iae"]) not in (float, int) or not math.isfinite(r["iae"]) or r["iae"] < 0:
                     raise ValueError("Error integrado inválido.")
                 Gains(**r["gains"])
-                if type(r["success"]) is not bool or type(r["fallen"]) is not bool:
+                if type(r["success"]) is not bool:
                     raise ValueError("Estado inválido.")
-                if r["success"] and r["fallen"]:
-                    raise ValueError("Éxito y caída incompatibles.")
             self.records = records
         except (OSError, ValueError, TypeError, KeyError, AttributeError, OverflowError) as exc:
             self.records = []
@@ -68,7 +66,7 @@ class Ranking:
         record = {"id": game.record_id, "alias": game.alias,
                   "date": datetime.now().astimezone().isoformat(timespec="seconds"),
                   "gains": asdict(result.gains), "iae": result.iae,
-                  "success": result.success, "fallen": result.fallen}
+                  "success": result.success}
         self.records.append(record)
         try:
             if not self.writable:
@@ -76,7 +74,7 @@ class Ranking:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             temporary = self.path.with_suffix(self.path.suffix + ".tmp")
             with temporary.open("w", encoding="utf-8") as stream:
-                json.dump({"schema": 1, "challenge": CHALLENGE, "records": self.records},
+                json.dump({"schema": 2, "challenge": CHALLENGE, "records": self.records},
                           stream, ensure_ascii=False, indent=2, allow_nan=False)
                 stream.flush()
                 os.fsync(stream.fileno())
