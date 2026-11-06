@@ -24,7 +24,7 @@
     "playback": "{duracion} s físicos  reproducción a {velocidad}×",
     "reference": "Referencia: 0° → {grados}° a los {tiempo} s · Margen de estabilidad: ±5°",
     "preparing_push": "PREPARANDO EMPUJÓN",
-    "push": "Empujón inicial · 2 rad/s",
+    "push": "Empujón inicial",
     "stability": "Margen de estabilidad: ±5°",
     "preparing": "Preparando…",
     "pause": "Pausar",

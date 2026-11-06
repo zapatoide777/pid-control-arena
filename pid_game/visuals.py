@@ -202,7 +202,7 @@ class ResponseChart(QWidget):
         key.setSpacing(8)
         for color, caption in ((CYAN, "SALIDA θ(t)"),
                                (GREEN, "REFERENCIA"),
-                               (CORAL, "EMPUJÓN · 2 rad/s")):
+                               (CORAL, "EMPUJÓN")):
             swatch = QFrame()
             swatch.setFixedSize(18, 3)
             swatch.setStyleSheet(f"background: {color}; border-radius: 1px;")
