@@ -53,7 +53,9 @@ class Ranking:
             backup = self.path.with_name(self.path.name + ".backup-" + datetime.now().strftime("%Y%m%d-%H%M%S-%f"))
             try:
                 self.path.replace(backup)
-                self.warning += f"Se conservó el archivo original en {backup.name}."
+                # La recuperación terminó: el respaldo conserva los datos y el
+                # juego puede guardar nuevos resultados sin mostrar una alarma.
+                self.warning = ""
             except OSError:
                 self.writable = False
                 self.warning += "El original se conserva; los nuevos resultados serán solo de esta sesión."

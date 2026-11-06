@@ -1,10 +1,26 @@
 # PID / Control Arena
 
-Juego en español para ajustar un PID en un péndulo invertido con motor DC en el pivote. En Windows con Python 3.11, ejecuta `jugar.cmd` o:
+Juego en español para ajustar un PID en un péndulo invertido con motor DC en el pivote. En Windows con Python 3.11, abre `jugar.vbs` para iniciar en pantalla completa sin consola. `jugar.cmd` también inicia el juego y cierra su consola. Pulsa F11 para alternar entre pantalla completa y ventana maximizada, o Alt+F4 para salir.
+
+## Instalación en Windows
+
+1. Descarga el repositorio y extrae el ZIP en una carpeta permanente.
+2. Instala Python 3.11 o posterior y activa **Add Python to PATH**.
+3. Haz doble clic en `instalar.cmd`. Necesita conexión a Internet para instalar las dependencias.
+4. Abre **Juego PID** desde el escritorio: arranca en pantalla completa, sin consola ni barra de título.
+
+El instalador crea un entorno `.venv` dentro del juego y un acceso directo para el usuario actual; no requiere permisos de administrador. Las rutas se calculan desde la carpeta descargada y admiten espacios y tildes.
+
+Si ya tienes las dependencias, puedes crear el acceso directo con doble clic en `crear_acceso_directo.vbs`. Si mueves la carpeta del juego, ejecuta ese archivo de nuevo para actualizarlo. El acceso directo necesita que conserves la carpeta del juego.
+
+**F11** alterna entre pantalla completa y ventana maximizada; **Alt+F4** cierra el juego.
+
+Para instalar o ejecutar desde una terminal, y después crear el acceso directo:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+cscript //nologo crear_acceso_directo.vbs /silencioso
 .\.venv\Scripts\python.exe main.py
 ```
 

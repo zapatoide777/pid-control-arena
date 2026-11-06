@@ -32,6 +32,19 @@ def release_report(window):
     click(window.continue_button)
 
 
+def test_recovered_old_ranking_has_no_start_or_result_warning(qapp, tmp_path):
+    path = tmp_path / "ranking.json"
+    path.write_text(json.dumps({"schema": 1, "challenge": "old", "records": []}), encoding="utf-8")
+    window = MainWindow(path)
+    assert window.start_warning.text() == ""
+    window.game = completed_game()
+    window.show_results()
+    assert window.save_warning.text() == ""
+    assert len(Ranking(path).records) == 1
+    assert len(list(tmp_path.glob("ranking.json.backup-*"))) == 1
+    window.close()
+
+
 def test_full_ui_flow_controls_hints_final_and_restart(qapp, tmp_path):
     window = MainWindow(tmp_path / "ranking.json")
     window.show()

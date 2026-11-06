@@ -31,7 +31,7 @@ data = out / 'ranking-qa.json'
 data.write_text(json.dumps({'schema': 2, 'challenge': CHALLENGE, 'records': []}), encoding='utf-8')
 window = MainWindow(data)
 window.setWindowTitle('PID - revisión visual')
-window.showMaximized()
+window.showFullScreen()
 QTest.qWait(200)
 window.timer.stop()
 
@@ -40,7 +40,7 @@ def capture(name):
     QTest.qWait(200)
     target = out / (name + '.png')
     window.grab().save(str(target))
-    print(name, window.size().width(), window.size().height(), window.isMaximized(), target)
+    print(name, window.size().width(), window.size().height(), window.isFullScreen(), target)
 
 def wait_guide(key):
     deadline = time.monotonic() + 30

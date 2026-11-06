@@ -872,5 +872,5 @@ def main():
     app.setApplicationName(text("menu.brand"))
     configure_app(app)
     window = MainWindow()
-    window.showMaximized()
+    window.showFullScreen()
     sys.exit(app.exec())

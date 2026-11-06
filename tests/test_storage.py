@@ -56,7 +56,7 @@ def test_previous_v9_challenge_is_archived_before_new_ranking(tmp_path):
            "records": []}
     path.write_text(json.dumps(old), encoding="utf-8")
     ranking = Ranking(path)
-    assert ranking.records == [] and "incompatible" in ranking.warning
+    assert ranking.records == [] and not ranking.warning
     backups = list(tmp_path.glob("ranking.json.backup-*"))
     assert len(backups) == 1 and json.loads(backups[0].read_text()) == old
 
@@ -66,7 +66,7 @@ def test_schema_one_ranking_is_archived_even_with_current_challenge(tmp_path):
     old = {"schema": 1, "challenge": CHALLENGE, "records": []}
     path.write_text(json.dumps(old), encoding="utf-8")
     ranking = Ranking(path)
-    assert ranking.records == [] and "incompatible" in ranking.warning
+    assert ranking.records == [] and not ranking.warning
     backups = list(tmp_path.glob("ranking.json.backup-*"))
     assert len(backups) == 1 and json.loads(backups[0].read_text()) == old
 
@@ -77,7 +77,7 @@ def test_corrupt_or_incompatible_file_preserved(tmp_path, content):
     path = tmp_path / "ranking.json"
     path.write_text(content, encoding="utf-8")
     ranking = Ranking(path)
-    assert ranking.records == [] and ranking.warning
+    assert ranking.records == [] and not ranking.warning
     backups = list(tmp_path.glob("ranking.json.backup-*"))
     assert len(backups) == 1 and backups[0].read_text(encoding="utf-8") == content
     ranking.add_game(completed_game())
@@ -90,7 +90,7 @@ def test_previous_three_second_challenge_is_archived_not_mixed(tmp_path):
            "records": []}
     path.write_text(json.dumps(old), encoding="utf-8")
     ranking = Ranking(path)
-    assert ranking.records == [] and "incompatible" in ranking.warning
+    assert ranking.records == [] and not ranking.warning
     backups = list(tmp_path.glob("ranking.json.backup-*"))
     assert len(backups) == 1 and json.loads(backups[0].read_text()) == old
 
@@ -101,7 +101,7 @@ def test_previous_t6_one_rads_challenge_is_archived_after_push_change(tmp_path):
            "records": []}
     path.write_text(json.dumps(old), encoding="utf-8")
     ranking = Ranking(path)
-    assert ranking.records == [] and "incompatible" in ranking.warning
+    assert ranking.records == [] and not ranking.warning
     backups = list(tmp_path.glob("ranking.json.backup-*"))
     assert len(backups) == 1 and json.loads(backups[0].read_text()) == old
 
@@ -114,6 +114,23 @@ def test_disk_write_error_keeps_result_in_memory(tmp_path, monkeypatch):
     ranking.add_game(completed_game())
     assert len(ranking.records) == 1
     assert "no se pudo guardar" in ranking.warning
+
+
+def test_failed_backup_preserves_original_and_warns(tmp_path, monkeypatch):
+    path = tmp_path / "ranking.json"
+    original = '{"schema": 99}'
+    path.write_text(original, encoding="utf-8")
+
+    def fail(*args, **kwargs):
+        raise PermissionError("prueba")
+
+    monkeypatch.setattr(Path, "replace", fail)
+    ranking = Ranking(path)
+    assert not ranking.writable
+    assert "El original se conserva" in ranking.warning
+    ranking.add_game(completed_game())
+    assert "no se pudo guardar" in ranking.warning
+    assert path.read_text(encoding="utf-8") == original
 
 
 def test_unfinished_game_cannot_be_registered(tmp_path):
@@ -132,7 +149,7 @@ def test_huge_numbers_in_corrupt_ranking_do_not_crash_startup(tmp_path, field):
     path.write_text(json.dumps({"schema": 2, "challenge": CHALLENGE, "records": [record]}), encoding="utf-8")
     restored = Ranking(path)
     assert restored.records == []
-    assert restored.warning
+    assert not restored.warning
     assert len(list(tmp_path.glob("ranking.json.backup-*"))) == 1
 
 
@@ -141,7 +158,7 @@ def test_previous_six_second_same_push_challenge_is_archived(tmp_path):
     old = {"schema": 1, "challenge": "pivot-v3-m.2-l.3-J.024-b.01-g9.81-w2-T6-stable-last1-5deg-dt.001-f.02-u2-iae-deg", "records": []}
     path.write_text(json.dumps(old), encoding="utf-8")
     ranking = Ranking(path)
-    assert not ranking.records and "incompatible" in ranking.warning
+    assert not ranking.records and not ranking.warning
     backups = list(tmp_path.glob("ranking.json.backup-*"))
     assert len(backups) == 1 and json.loads(backups[0].read_text()) == old
 
@@ -151,7 +168,7 @@ def test_previous_instant_actuator_challenge_is_archived(tmp_path):
     old = {"schema": 1, "challenge": "pivot-v4-m.2-l.3-J.024-b.01-g9.81-w2-T10-stable-last1-5deg-dt.001-f.02-u2-iae-deg", "records": []}
     path.write_text(json.dumps(old), encoding="utf-8")
     ranking = Ranking(path)
-    assert not ranking.records and "incompatible" in ranking.warning
+    assert not ranking.records and not ranking.warning
     backups = list(tmp_path.glob("ranking.json.backup-*"))
     assert len(backups) == 1 and json.loads(backups[0].read_text()) == old
 
@@ -161,7 +178,7 @@ def test_previous_v7_ten_second_challenge_is_archived(tmp_path):
     old = {"schema": 1, "challenge": "pivot-v7-dcmotor-r2-l.16-k.333-v12-i6-coulomb.015-step4-8deg-w2-T10-dt.001-iae-deg", "records": []}
     path.write_text(json.dumps(old), encoding="utf-8")
     ranking = Ranking(path)
-    assert not ranking.records and "incompatible" in ranking.warning
+    assert not ranking.records and not ranking.warning
     backups = list(tmp_path.glob("ranking.json.backup-*"))
     assert len(backups) == 1 and json.loads(backups[0].read_text()) == old
 
@@ -171,4 +188,4 @@ def test_previous_v8_eight_degree_challenge_is_archived(tmp_path):
     old = {"schema": 1, "challenge": "pivot-v8-dcmotor-r2-l.16-k.333-v12-i6-coulomb.015-step5-8deg-w2-T15-dt.001-iae-deg", "records": []}
     path.write_text(json.dumps(old), encoding="utf-8")
     ranking = Ranking(path)
-    assert ranking.records == [] and "incompatible" in ranking.warning
+    assert ranking.records == [] and not ranking.warning
